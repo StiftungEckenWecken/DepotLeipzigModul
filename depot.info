@@ -1,0 +1,7 @@
+name = depot
+description = Ressourcen und Buchungen einfach managen.
+package = Depot
+core = 7.x
+dependencies[] = bat
+dependencies[] = bat_booking
+dependencies[] = bat_fullcalendar

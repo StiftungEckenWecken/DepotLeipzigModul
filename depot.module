@@ -1,0 +1,147 @@
+<?php
+
+use Roomify\Bat\Event\Event;
+/*use Roomify\Bat\Calendar\Calendar;
+use Roomify\Bat\Store\DrupalDBStore;
+use Roomify\Bat\Unit\Unit;
+*/
+
+/**
+ * Implements hook_theme_registry_alter().
+ */
+function depot_theme_registry_alter(&$theme_registry) {
+  // Defined path to the current module.
+  $module_path = drupal_get_path('module', 'depot');
+  
+  // Find all .tpl.php files in this module's folder recursively.
+  $template_file_objects = drupal_find_theme_templates($theme_registry, '.tpl.php', $module_path);
+  
+  print_r($template_file_objects);
+  
+  // Iterate through all found template file objects.
+  foreach ($template_file_objects as $key => $template_file_object) {
+    // If the template has not already been overridden by a theme.
+   // if (!isset($theme_registry[$key]['theme path']) || !preg_match('#/themes/#', $theme_registry[$key]['theme path'])) {
+      // Alter the theme path and template elements.
+      $theme_registry[$key]['theme path'] = $module_path;
+      $theme_registry[$key] = array_merge($theme_registry[$key], $template_file_object);
+      $theme_registry[$key]['type'] = 'module';
+  //  }
+  }
+  
+}
+
+
+/**
+ * Implements hook_menu
+ */
+function depot_menu() {
+
+  $items['buchungen/neu'] = array(
+    'page callback' => '_buchungen_neu_redirect',
+    'description' => 'Redirect to native BAT booking form',
+    'access callback' => TRUE,
+  );
+  
+  return $items;
+  
+}
+
+function _buchungen_neu_redirect() {
+
+  drupal_goto('admin/bat/config/booking/add/standard');
+  
+}
+
+
+// Disable table header for "Neueste Ressourcen" block
+function depot_preprocess_views_view_table(&$vars) {
+
+  echo $vars['view']->name; exit();
+  
+  if ($vars['view']->name == 'neueste_ressourcen') {
+    $vars['header'] = array();
+  }
+  
+}
+
+/**
+ * Implements hook_views_pre_render
+ * Hides unwanted fields
+ */
+function depot_views_pre_render(&$view) {
+  //print_r($view);
+  global $user;
+  if (!in_array('authenticated user',$user->roles)) {
+    unset($view->field['field_to_hide']);
+  }
+}
+
+
+/*views-view-field.tpl.php
+-> Mache Feld Bezirk (ID: field_bezirk) automatisch zu Link
+-> Feld Kategorie (ID: field_kategorie) zu Link!*/
+
+
+/*
+  Implements hook_form_alter
+  Turns "kategorie"- and "bezirk"-state-id-filter into select-field
+*/
+
+function depot_form_alter(&$form, &$form_state, $form_id) {
+
+//print_r($form);
+
+  switch ($form_id){
+    
+    case 'views_exposed_form':
+    
+      $form['bezirk_id']['#type'] = "select";
+      $form['bezirk_id']['#size'] = null;
+      $form['bezirk_id']['#default_value'] = 'All';
+      $form['bezirk_id']['#required'] = FALSE;
+      $form['bezirk_id']['#options'] = depot_get_bezirke(true);
+      
+      $form['kategorie_id']['#type'] = "select";
+      $form['kategorie_id']['#size'] = null;
+      $form['kategorie_id']['#default_value'] = 'All';
+      $form['kategorie_id']['#options'] = depot_get_kategorien(true);
+    
+    break;
+    
+  }
+}
+
+/*
+  function depot_get_bezirke
+  @return array
+*/
+function depot_get_bezirke($format = false){
+  if ($format){
+    $result = array();
+    $result[''] = t('<Alle>');
+    foreach (bat_event_get_states('depot_bezirk') as $state_id => $state){
+      $result[$state_id] = $state['label'];
+    }
+    return $result;
+  } else {
+    return bat_event_get_states('depot_bezirk');
+  }
+}
+
+/*
+  function depot_get_kategorien
+  @return array
+*/
+function depot_get_kategorien($format = false){
+ if ($format){
+    $result = array();
+    $result[''] = t('<Alle>');
+    foreach (bat_event_get_states('depot_kategorie') as $state_id => $state){
+      $result[$state_id] = $state['label'];
+    }
+    return $result;
+  } else {
+    return bat_event_get_states('depot_kategorie');
+  }
+}
