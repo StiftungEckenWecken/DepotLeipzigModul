@@ -1,0 +1,33 @@
+dsm($form) // devel
+
+/**
+ * VBO action: Assign fixed-state event to units.
+ 
+function bat_event_unit_set_state(&$unit, $context) {
+  $type = bat_type_load($unit->type_id);
+  $type_bundle = bat_type_bundle_load($type->type);
+
+  $event_state = $context['form_values']['event_state'];
+  $event_type = $context['form_values']['event_type'];
+
+  $start_date = new DateTime($context['form_values']['bat_start_date']);
+  $end_date = new DateTime($context['form_values']['bat_end_date']);
+  $end_date->sub(new DateInterval('PT1M'));
+
+  if (isset($type_bundle->default_event_value_field_ids[$event_type]) && !empty($type_bundle->default_event_value_field_ids[$event_type])) {
+    $event = bat_event_create(array(
+      'type' => $event_type,
+      'start_date' => $start_date->format('Y-m-d H:i:s'),
+      'end_date' => $end_date->format('Y-m-d H:i:s'),
+      'uid' => $type->uid,
+      'created' => REQUEST_TIME,
+    ));
+
+    $event->event_bat_unit_reference[LANGUAGE_NONE][0]['target_id'] = $unit->unit_id;
+
+    $state = bat_event_load_state_by_machine_name($event_state);
+    $event->event_state_reference[LANGUAGE_NONE][0]['state_id'] = $state['id'];
+
+    $event->save();
+  }
+}*/
