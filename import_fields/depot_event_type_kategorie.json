@@ -1,0 +1,68 @@
+{
+  "type" : "depot_kategorie",
+  "label" : "Depot Kategorie",
+  "event_granularity" : "bat_daily",
+  "fixed_event_states" : "1",
+  "weight" : "0",
+  "default_event_value_field_ids" : null,
+  "default_event_label_field_name" : null,
+  "data" : "",
+  "target_entity_type" : "bat_unit",
+  "rdf_mapping" : [],
+  "event_states" : [
+    {
+      "machine_name" : "r_ume",
+      "label" : "R\u00e4ume",
+      "color" : "#9616f8",
+      "calendar_label" : "R\u00e4ume",
+      "locked" : "0",
+      "blocking" : "0",
+      "default_state" : "0"
+    },
+    {
+      "machine_name" : "m_bel_garten",
+      "label" : "M\u00f6bel \u0026 Garten",
+      "color" : "#ec0707",
+      "calendar_label" : "M\u00f6bel \u0026 Garten",
+      "locked" : "0",
+      "blocking" : "0",
+      "default_state" : "0"
+    },
+    {
+      "machine_name" : "instrumente",
+      "label" : "Instrumente",
+      "color" : "#aeff0f",
+      "calendar_label" : "Instrumente",
+      "locked" : "0",
+      "blocking" : "0",
+      "default_state" : "0"
+    },
+    {
+      "machine_name" : "haushalt_k_che",
+      "label" : "Haushalt \u0026 K\u00fcche",
+      "color" : "#f70f0f",
+      "calendar_label" : "Haushalt \u0026 K\u00fcche",
+      "locked" : "0",
+      "blocking" : "0",
+      "default_state" : "0"
+    },
+    {
+      "machine_name" : "werkzeuge",
+      "label" : "Werkzeuge",
+      "color" : "#ca00ee",
+      "calendar_label" : "Werkzeuge",
+      "locked" : "0",
+      "blocking" : "0",
+      "default_state" : "0"
+    },
+    {
+      "machine_name" : "sonstige",
+      "label" : "Sonstige",
+      "color" : "#ff3838",
+      "calendar_label" : "Sonstige",
+      "locked" : "0",
+      "blocking" : "0",
+      "default_state" : "0"
+    }
+  ]
+}

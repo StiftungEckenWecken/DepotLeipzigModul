@@ -1,0 +1,41 @@
+{
+  "type" : "depot_availability",
+  "label" : "Depot Verf\u00fcgbarkeit",
+  "event_granularity" : "bat_daily",
+  "fixed_event_states" : "1",
+  "weight" : "0",
+  "default_event_value_field_ids" : null,
+  "default_event_label_field_name" : "",
+  "data" : "",
+  "target_entity_type" : "bat_unit",
+  "rdf_mapping" : [],
+  "event_states" : [
+    {
+      "machine_name" : "frei",
+      "label" : "Frei",
+      "color" : "#50bb00",
+      "calendar_label" : "Frei",
+      "locked" : "0",
+      "blocking" : "0",
+      "default_state" : "0"
+    },
+    {
+      "machine_name" : "gebucht",
+      "label" : "Gebucht",
+      "color" : "#f40000",
+      "calendar_label" : "Gebucht",
+      "locked" : "0",
+      "blocking" : "1",
+      "default_state" : "0"
+    },
+    {
+      "machine_name" : "geblockt",
+      "label" : "Geblockt",
+      "color" : "#ff2525",
+      "calendar_label" : "Geblockt",
+      "locked" : "0",
+      "blocking" : "1",
+      "default_state" : "0"
+    }
+  ]
+}

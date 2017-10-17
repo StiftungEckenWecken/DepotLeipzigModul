@@ -1,33 +1,24 @@
 <?php
 
 use Roomify\Bat\Event\Event;
-/*use Roomify\Bat\Calendar\Calendar;
-use Roomify\Bat\Store\DrupalDBStore;
-use Roomify\Bat\Unit\Unit;
-*/
 
 /**
- * Implements hook_theme_registry_alter().
+ * Implements hook_menu_alter()
+ * Display admin-menues based on users role
  */
-function depot_theme_registry_alter(&$theme_registry) {
-  // Defined path to the current module.
-  $module_path = drupal_get_path('module', 'depot');
-  
-  // Find all .tpl.php files in this module's folder recursively.
-  $template_file_objects = drupal_find_theme_templates($theme_registry, '.tpl.php', $module_path);
-  
-  print_r($template_file_objects);
-  
-  // Iterate through all found template file objects.
-  foreach ($template_file_objects as $key => $template_file_object) {
-    // If the template has not already been overridden by a theme.
-   // if (!isset($theme_registry[$key]['theme path']) || !preg_match('#/themes/#', $theme_registry[$key]['theme path'])) {
-      // Alter the theme path and template elements.
-      $theme_registry[$key]['theme path'] = $module_path;
-      $theme_registry[$key] = array_merge($theme_registry[$key], $template_file_object);
-      $theme_registry[$key]['type'] = 'module';
-  //  }
+function depot_menu_alter(&$items) {
+
+   $items['admin']['access callback'] = 'depot_admin_access_only';
+   
+}
+
+function depot_admin_access_only() {
+
+  global $user;
+  if (!in_array('administrator', $user->roles)){
+    return false;
   }
+  return true;
   
 }
 
@@ -38,13 +29,69 @@ function depot_theme_registry_alter(&$theme_registry) {
 function depot_menu() {
 
   $items['buchungen/neu'] = array(
-    'page callback' => '_buchungen_neu_redirect',
-    'description' => 'Redirect to native BAT booking form',
-    'access callback' => TRUE,
+    'title' => t('Neue Buchung'),
+    'page callback' => 'depot_buchung_neu_form',
+    'description' => t('Neue Buchung anlegen'),
+    'access callback' => TRUE, // 2DO
   );
-  
+
+  $items['ressourcen/neu'] = array(
+    'title' => t('Neue Ressource anlegen'),
+    'page callback' => 'depot_ressource_neu_form',
+    'description' => t('Neue Ressource anlegen'),
+    'access callback' => TRUE, // 2DO
+  );
+  /*
+        $items[$this->path . '/add/' . $booking_type->type] = array(
+        'title' => 'Add @booking_type_label booking',
+        'title arguments' => array('@booking_type_label' => $booking_type->label),
+        'page callback' => 'bat_booking_create_form_wrapper',
+        'page arguments' => array($booking_type->type),
+        'access callback' => 'bat_booking_access',
+        'access arguments' => array('create', bat_booking_create(array('type' => $booking_type->type, 'uid' => 0))),
+        'file' => 'bat_booking.admin.inc',
+        'file path' => drupal_get_path('module', $this->entityInfo['module']),
+      );*/
   return $items;
   
+}
+
+/**
+ * Called by path buchungen/neu
+ * Presents a booking form, based on BAT Booking module
+ */
+function depot_buchung_neu_form($type = 'standard'){
+
+  global $user;
+
+  $booking = bat_booking_create(array('type' => $type, 'uid' => $user->uid));
+  $booking->created = REQUEST_TIME;
+  $booking->author_name = $user->name;
+  $booking->status = 1;
+
+  include_once('forms/depot_buchung_form.php');
+
+  return drupal_get_form('depot_booking_edit_form', $booking);
+
+}
+
+/**
+ * Called by path ressourcen/neu
+ * Presents a booking form, based on BAT Booking module
+ */
+function depot_ressource_neu_form($type = 'depot'){
+
+  global $user;
+
+  $booking = bat_type_create(array('type' => $type, 'uid' => $user->uid));
+  $booking->created = REQUEST_TIME;
+  $booking->author_name = $user->name;
+  $booking->status = 1;
+
+  include_once('forms/depot_ressource_form.php');
+
+  return drupal_get_form('depot_ressource_edit_form', $booking);
+
 }
 
 function _buchungen_neu_redirect() {
@@ -54,10 +101,11 @@ function _buchungen_neu_redirect() {
 }
 
 
-// Disable table header for "Neueste Ressourcen" block
+/**
+ * Implements hook_preprocess_views_view_table
+ * Disable table header for "Neueste Ressourcen" block
+ */
 function depot_preprocess_views_view_table(&$vars) {
-
-  echo $vars['view']->name; exit();
   
   if ($vars['view']->name == 'neueste_ressourcen') {
     $vars['header'] = array();
@@ -72,7 +120,9 @@ function depot_preprocess_views_view_table(&$vars) {
 function depot_views_pre_render(&$view) {
   //print_r($view);
   global $user;
-  if (!in_array('authenticated user',$user->roles)) {
+  
+  if (!in_array('authenticated user', $user->roles)) {
+    // bookings/new
     unset($view->field['field_to_hide']);
   }
 }
@@ -83,10 +133,12 @@ function depot_views_pre_render(&$view) {
 -> Feld Kategorie (ID: field_kategorie) zu Link!*/
 
 
-/*
-  Implements hook_form_alter
-  Turns "kategorie"- and "bezirk"-state-id-filter into select-field
-*/
+/**
+ * Implements hook_form_alter
+ * Turns "kategorie"- and "bezirk"-state-id-filter into select-field
+ * TODO: Add caching
+ * TODO: Sort #options via sort()
+ */
 
 function depot_form_alter(&$form, &$form_state, $form_id) {
 
@@ -119,29 +171,53 @@ function depot_form_alter(&$form, &$form_state, $form_id) {
 function depot_get_bezirke($format = false){
   if ($format){
     $result = array();
-    $result[''] = t('<Alle>');
+    $result[''] = '<'.t('Alle').'>';
     foreach (bat_event_get_states('depot_bezirk') as $state_id => $state){
       $result[$state_id] = $state['label'];
     }
     return $result;
-  } else {
-    return bat_event_get_states('depot_bezirk');
   }
+  return bat_event_get_states('depot_bezirk');
+  
 }
 
-/*
-  function depot_get_kategorien
-  @return array
-*/
+/**
+ * function depot_get_kategorien
+ * @return array
+ */
 function depot_get_kategorien($format = false){
  if ($format){
     $result = array();
-    $result[''] = t('<Alle>');
+    $result[''] = '<'.t('Alle').'>';
     foreach (bat_event_get_states('depot_kategorie') as $state_id => $state){
       $result[$state_id] = $state['label'];
     }
     return $result;
-  } else {
-    return bat_event_get_states('depot_kategorie');
   }
+  return bat_event_get_states('depot_kategorie');
+  
+}
+
+/**
+ * Add or remove units for certain ressource
+ */
+function depot_units_bulk_action($action = 'add', $units_name, $type_id, $total_units){
+    
+    global $user;
+
+    if ($action == 'add'){
+
+      for ($i = 0; $i <= $total_units; $i++) {
+          $unit = bat_unit_create(array('type' => 'default'));
+          $unit->name = $units_name . ' ' . $i;
+          $unit->created = REQUEST_TIME;
+      
+          $unit->type_id = $type_id;
+          $unit->default_state = 1;
+          $unit->uid = $user->uid;
+          $unit->save();
+      }
+
+    }
+
 }
