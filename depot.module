@@ -32,28 +32,90 @@ function depot_menu() {
     'title' => t('Neue Buchung'),
     'page callback' => 'depot_buchung_neu_form',
     'description' => t('Neue Buchung anlegen'),
-    'access callback' => TRUE, // 2DO
+    'access callback' => 'user_is_logged_in'
   );
+
+  /*'args'     => array(
+          array(
+            'name'         => 'unit_ids',
+            'type'         => 'string',
+            'description'  => t('Unit IDs'),
+            'source'       => array('param' => 'unit_ids'),
+            'optional'     => TRUE,
+          ),
+          array(
+            'name'         => 'unit_types',
+            'type'         => 'string',
+            'description'  => t('Unit Types'),
+            'source'       => array('param' => 'unit_types'),
+            'optional'     => TRUE,
+          ),*/
 
   $items['ressourcen/neu'] = array(
     'title' => t('Neue Ressource anlegen'),
     'page callback' => 'depot_ressource_neu_form',
     'description' => t('Neue Ressource anlegen'),
-    'access callback' => TRUE, // 2DO
+    'access callback' => 'user_is_logged_in'
   );
-  /*
-        $items[$this->path . '/add/' . $booking_type->type] = array(
-        'title' => 'Add @booking_type_label booking',
-        'title arguments' => array('@booking_type_label' => $booking_type->label),
-        'page callback' => 'bat_booking_create_form_wrapper',
-        'page arguments' => array($booking_type->type),
-        'access callback' => 'bat_booking_access',
-        'access arguments' => array('create', bat_booking_create(array('type' => $booking_type->type, 'uid' => 0))),
-        'file' => 'bat_booking.admin.inc',
-        'file path' => drupal_get_path('module', $this->entityInfo['module']),
-      );*/
+
+  $items['depot/check_availability'] = array(
+    'title' => NULL,
+    'page callback' => 'depot_ajax_check_availability',
+    'description' => 'AJAX method for resources'
+  );
+
   return $items;
   
+}
+
+/* Wrapper to handle availability requests */
+function depot_ajax_check_availability(){
+
+  $path = explode("/",current_path());
+  print_r($path);
+
+  depot_check_availability();
+
+  //drupal_add_http_header('Content-Type', 'application/json');
+
+  /*
+    echo json_encode($resultAdresse);
+    
+*/
+  drupal_exit();
+}
+
+//function depot_check_availability($rid, $start, $end, $units = 1){
+  function depot_check_availability(){
+
+    $rid = 1;
+  //$start = new DateTime($start);
+  //$end = new DateTime($end);
+
+  $query = db_select('bat_units', 'u')
+           ->fields('u', array('type_id'))
+           ->condition('type_id', $rid)
+           ->execute();
+
+  $unitsCount = $query->rowCount();
+      
+  if (!$unitsCount) {
+    return t('Unbekannte Ressource');
+  } else {
+    foreach ($query->fetchAll() as $unit) {
+   
+      $u = bat_unit_load($unit->type_id);
+     // var_dump($u);
+     // exit();
+       // ->condition('created', array($start_time, $end_time), 'BETWEEN');
+    }
+
+    if (count($units) == 0) {
+      return ROOMS_NO_ROOMS;
+    }
+    
+   return drupal_json_output($matches);
+  }
 }
 
 /**
@@ -70,7 +132,6 @@ function depot_buchung_neu_form($type = 'standard'){
   $booking->status = 1;
 
   include_once('forms/depot_buchung_form.php');
-
   return drupal_get_form('depot_booking_edit_form', $booking);
 
 }
@@ -123,7 +184,7 @@ function depot_views_pre_render(&$view) {
   
   if (!in_array('authenticated user', $user->roles)) {
     // bookings/new
-    unset($view->field['field_to_hide']);
+    // unset($view->field['field_to_hide']);
   }
 }
 
@@ -162,6 +223,47 @@ function depot_form_alter(&$form, &$form_state, $form_id) {
     break;
     
   }
+}
+
+/**
+ * function depot_get_available_units_by_rid
+ * @param string rid
+ * @param string $start_date
+ * @param string $end_date
+ * @param bool $format
+ * @return array $events / [if $format:] array $event_ids
+ */
+function depot_get_available_units_by_rid($rid, $start_date, $end_date, $format = false){
+
+  $modulePath = drupal_get_path('module', 'bat_api');
+  include_once $modulePath .'/bat_api.module';
+
+  $events = bat_api_services_events_index_calendar(0, $rid, $start_date, $end_date, 'depot_availability', TRUE);  
+
+  if ($format){
+    $event_ids = array();
+    $clean_up_ids = array();
+    foreach ($events as $key => $event){
+      if ($event['blocking']){
+        
+        if ((strtotime($event['start']) <= strtotime($start_date) && strtotime($event['end']) <= strtotime($end_date))
+             || (strtotime($event['start']) <= strtotime($end_date) && strtotime($event['end']) >= strtotime($start_date))){
+          $clean_up_ids[$event['resourceId']] = true;
+        }
+      } else {
+        $event_ids[$event['resourceId']] = true;
+      }
+    }
+    foreach ($clean_up_ids as $key => $void){
+      if ($event_ids[$key])
+        unset($event_ids[$key]);
+    }
+    return $event_ids;
+
+  }
+
+  return $events;
+  
 }
 
 /*

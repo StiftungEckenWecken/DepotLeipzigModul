@@ -7,3 +7,27 @@
 4. ???
 
 */
+
+/**
+ * Implements hook_install().
+ */
+function depot_install() {
+  depot_create_availability_event_type();
+  //bat_booking_example_create_standard_event_states();
+}
+
+/**
+ * Create the "Availability Example" event type.
+ * @see bat_booking_example.install
+ */
+function depot_create_availability_event_type() {
+  $event = new BatEventType(array(
+    'label' => 'Availability Example',
+    'type' => 'availability_example',
+    'fixed_event_states' => 1,
+    'event_granularity' => 'bat_daily',
+    'target_entity_type' => 'bat_unit',
+  ));
+
+  bat_event_type_save($event);
+}

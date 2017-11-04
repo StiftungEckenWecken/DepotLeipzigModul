@@ -2,10 +2,6 @@
 
 /**
  * Form callback wrapper: delete a ressource.
- *
- * @param BatType $type
- *   The type object being edited by this form.
- *
  */
 function depot_ressource_delete_form_wrapper($type) {
   // Add the breadcrumb for the form's location.
@@ -15,15 +11,12 @@ function depot_ressource_delete_form_wrapper($type) {
 
 /**
  * Form callback: create or edit a ressource.
- *
- * @param BatType $type
- *   The BatType object to edit or, for a creation form, an empty type object
- *   with only a type bundle defined.
  */
 function depot_ressource_edit_form($form, &$form_state, $type) {
 
   $form['intro'] = array(
-    '#markup' => '<p>'.t('Alle mit <span style="color:red;">*</span> markierten Felder sind auszufüllen. Verfügbarkeiten können im nächsten Schritt verwaltet werden.').'</p>'
+    '#markup' => '<p>'.t('Alle mit <span style="color:red;">*</span> markierten Felder sind auszufüllen. Verfügbarkeiten können im nächsten Schritt verwaltet werden.').'</p>',
+    '#weight' => '-99'
   );
 
   $form['#attributes']['class'][] = 'bat-management-form bat-type-edit-form';
@@ -41,6 +34,8 @@ function depot_ressource_edit_form($form, &$form_state, $type) {
     '#maxlength' => 255,
     '#required' => TRUE,
     '#weight' => -99,
+    '#prefix' => '<div class="medium-6 column left">',
+    '#suffix' => '</div>'
   );
 
   // Add the field related form elements.
@@ -50,11 +45,99 @@ function depot_ressource_edit_form($form, &$form_state, $type) {
     '#type' => 'vertical_tabs',
     '#weight' => 99,
   );
+  
+  // Depot related styling
+  foreach ($form as $title => $field){
+    if (is_array($field) && strpos($title,'field') >= 0){
+      $form[$title]['#attributes']['class'][] = 'column';
+    }
+  }
+  $form['field_anzahl_einheiten']['#attributes']['class'][] = 'medium-6';
+  $form['field_anzahl_einheiten']['#weight'] = 6;
+  $form['field_minimale_anzahl']['#attributes']['class'][] = 'medium-6';
+  $form['field_kategorie']['#attributes']['class'][] = 'medium-6 right';
+
+  $form['images'] = array(
+    '#type' => 'container',
+    '#weight' => 2,
+    '#prefix' => '<fieldset class="medium-12 column"><legend>'.t('Bilder').'</legend>',
+    '#suffix' => '</fieldset>'
+  );
+  $form['field_bild_i']['#prefix'] = '<div class="medium-4 column">';
+  $form['field_bild_i']['#suffix'] = '</div>';
+  $form['field_bild_ii']['#prefix'] = '<div class="medium-4 column">';
+  $form['field_bild_ii']['#suffix'] = '</div>';
+  $form['field_bild_ii']['und'][0]['#description'] = '';
+  $form['field_bild_iii']['#prefix'] = '<div class="medium-4 column">';
+  $form['field_bild_iii']['#suffix'] = '</div>';
+  $form['field_bild_iii']['und'][0]['#description'] = '';
+  $form['images']['image_i'] = $form['field_bild_i'];
+  $form['images']['image_ii'] = $form['field_bild_ii'];
+  $form['images']['image_iii'] = $form['field_bild_iii'];
+  unset($form['field_bild_i']);
+  unset($form['field_bild_ii']);
+  unset($form['field_bild_iii']);
+
+  $form['price'] = array(
+    '#type' => 'container',
+    '#weight' => 4,
+    '#prefix' => '<fieldset class="medium-12 column"><legend>'.t('Preis').'</legend>',
+    '#suffix' => '</fieldset>'
+  );
+  $form['price']['price_normal'] = $form['field_kosten'];
+  $form['price']['price_discount'] = $form['field_kosten_2'];
+  $form['price']['price_deposit'] = $form['field_kaution'];
+  $form['price']['price_granularity'] = $form['field_abrechnungstakt'];
+  unset($form['field_kosten']);
+  unset($form['field_kosten_2']);
+  unset($form['field_kaution']);
+  unset($form['field_abrechnungstakt']);
+  $form['price']['price_normal']['#prefix'] = '<div class="medium-3 column">';
+  $form['price']['price_normal']['#suffix'] = '</div>';
+  $form['price']['price_discount']['#prefix'] = '<div class="medium-3 column">';
+  $form['price']['price_discount']['#suffix'] = '</div>';
+  $form['price']['price_deposit']['#prefix'] = '<div class="medium-3 column">';
+  $form['price']['price_deposit']['#suffix'] = '</div>';
+  $form['price']['price_granularity']['#prefix'] = '<div class="medium-3 column">';
+  $form['price']['price_granularity']['#suffix'] = '</div>';
+
+  $form['adress'] = array(
+    '#type' => 'container',
+    '#weight' => 4,
+    '#prefix' => '<fieldset class="medium-12 column"><legend>'.t('Ort der Abholung').'</legend>',
+    '#suffix' => '</fieldset>'
+  );
+  $form['adress']['field_adresse_strasse'] = $form['field_adresse_strasse'];
+  $form['adress']['field_adresse_postleitzahl'] = $form['field_adresse_postleitzahl'];
+  $form['adress']['field_adresse_ort'] = $form['field_adresse_ort'];
+  $form['adress']['field_bezirk'] = $form['field_bezirk'];
+  unset($form['field_adresse_strasse']);
+  unset($form['field_adresse_postleitzahl']);
+  unset($form['field_adresse_ort']);
+  unset($form['field_bezirk']);
+  $form['adress']['field_adresse_strasse']['#prefix'] = '<div class="medium-4 column">';
+  $form['adress']['field_adresse_strasse']['#suffix'] = '</div>';
+  $form['adress']['field_adresse_postleitzahl']['#prefix'] = '<div class="medium-2 column">';
+  $form['adress']['field_adresse_postleitzahl']['#suffix'] = '</div>';
+  $form['adress']['field_adresse_ort']['#prefix'] = '<div class="medium-3 column">';
+  $form['adress']['field_adresse_ort']['#suffix'] = '</div>';
+  $form['adress']['field_bezirk']['#prefix'] = '<div class="medium-3 column">';
+  $form['adress']['field_bezirk']['#suffix'] = '</div>';
+  
+
+  //$form['field_links_i']['und'][0]['#title'] = '<i class="fi fi-link"></i>';
+  if (empty($type->field_links_i))
+      $form['field_links_ii']['#attributes']['class'][] = 'hide';
+  if (empty($type->field_links_ii))
+      $form['field_links_iii']['#attributes']['class'][] = 'hide';
+  
+  
 
   // Type author information for administrators.
   $form['author'] = array(
     '#type' => 'fieldset',
-    '#access' => user_access('bypass bat_type entities access'),
+    '#access' => FALSE,
+   // '#access' => user_access('bypass bat_type entities access'),
     '#title' => t('Authoring information'),
     '#collapsible' => TRUE,
     '#collapsed' => TRUE,
@@ -91,7 +174,8 @@ function depot_ressource_edit_form($form, &$form_state, $type) {
 
   $form['revisions'] = array(
     '#type' => 'fieldset',
-    '#access' => user_access('bypass bat_type entities access'),
+    '#access' => FALSE,
+   // '#access' => user_access('bypass bat_type entities access'),
     '#title' => t('Revision information'),
     '#collapsible' => TRUE,
     '#collapsed' => TRUE,
@@ -105,6 +189,7 @@ function depot_ressource_edit_form($form, &$form_state, $type) {
   if (module_exists('revisioning')) {
     $form['revisions']['log'] = array(
       '#type' => 'textarea',
+      '#access' => FALSE,
       '#title' => !empty($type->type_id) ? t('Update log message') : t('Creation log message'),
       '#rows' => 4,
       '#description' => t('Provide an explanation of the changes you are making. This will provide a meaningful history of changes to this type.'),
@@ -163,7 +248,8 @@ function depot_ressource_edit_form($form, &$form_state, $type) {
   // Type publishing options for administrators.
   $form['options'] = array(
     '#type' => 'fieldset',
-    '#access' => user_access('bypass bat_type entities access'),
+    '#access' => FALSE,
+    //'#access' => user_access('bypass bat_type entities access'),
     '#title' => t('Publishing options'),
     '#collapsible' => TRUE,
     '#collapsed' => TRUE,
@@ -194,17 +280,26 @@ function depot_ressource_edit_form($form, &$form_state, $type) {
     '#value' => t('Ressource speichern'),
     '#submit' => $submit + array('depot_ressource_edit_form_submit'),
   );
+  $form['actions']['submit']['#attributes']['class'] = array('button');
+  
+  // If !new form, add more options
   if (!empty($type->name) && bat_type_access('delete', $type)) {
+
+    $form['actions']['availabilities'] = array(
+      '#markup' => '<a href="#" title="'.t('Verfügbarkeiten bearbeiten').'" class="button"><fi class="fi fi-calendar"></i> '.t('Verfügbarkeiten bearbeiten').'</a>',
+    );
+
     $form['actions']['delete'] = array(
       '#type' => 'submit',
       '#value' => t('Ressource löschen'),
-      '#suffix' => l(t('Cancel'), 'admin/bat/config/types'),
+      '#suffix' => l(t('Abbrechen'), 'ressourcen'),
       '#submit' => $submit + array('depot_ressource_form_submit_delete'),
       '#weight' => 45,
     );
+  } else {
+    $form['actions']['submit']['#attributes']['class'] = array('button expand');
   }
-  // We append the validate handler to #validate in case a form callback_wrapper
-  // is used to add validate handlers earlier.
+
   $form['#validate'][] = 'depot_ressource_edit_form_validate';
 
   return $form;

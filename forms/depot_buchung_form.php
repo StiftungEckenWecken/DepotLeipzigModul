@@ -1,13 +1,48 @@
-<?php 
+<?php
 
 /**
  * Generates the booking editing form.
  */
 function depot_booking_edit_form($form, &$form_state, $booking) {
 
-  // Add the field related form elements.
+  global $user;
+
+  // 1. Validate URI-params
+  $required_params = array(
+    'rid' => array('int' => TRUE),
+    'start' => array('int' => TRUE),
+    'end' => array('int' => TRUE),
+    'einheiten' => array('int' => TRUE)
+  );
+
+  $params = array();
+
+  foreach (drupal_get_query_parameters() as $param => $val){
+    if (isset($required_params[$param])){
+      if (isset($required_params[$param]['int'])){ // TODO is_int
+        unset($required_params[$param]);
+        $params[$param] = $val;
+      }
+    }
+  }
+  if (!empty($required_params)){
+    // TODO: Route back
+    echo t('Missing or invalid params. If problem continues please inform admin.');
+    drupal_exit();
+  }
+
+  // 2. Manually check again for availability of resources
+  $avail_units = depot_get_available_units_by_rid($params['rid'], $params['start'], $params['end'], true);
+  if (empty($avail_units)){
+    // TODO: Route back
+    echo t('Keine Ressourcen in diesem Zeitraum verfügbar');
+    drupal_exit();
+  }
+
+  // 3. Add the field related form elements.
   $form_state['bat_booking'] = $booking;
   field_attach_form('bat_booking', $booking, $form, $form_state, isset($booking->language) ? $booking->language : NULL);
+
   $form['additional_settings'] = array(
     '#type' => 'vertical_tabs',
     '#weight' => 99,
@@ -16,7 +51,8 @@ function depot_booking_edit_form($form, &$form_state, $booking) {
   // Type author information for administrators.
   $form['author'] = array(
     '#type' => 'fieldset',
-    '#access' => user_access('bypass bat_booking entities access'),
+    '#access' => FALSE,
+    //'#access' => user_access('bypass bat_booking entities access'),
     '#title' => t('Authoring information'),
     '#collapsible' => TRUE,
     '#collapsed' => TRUE,
@@ -74,6 +110,20 @@ function depot_booking_edit_form($form, &$form_state, $booking) {
     '#title' => t('Published'),
     '#default_value' => $booking->status,
   );
+
+  $form['field_ausleiher']['#type'] = 'hidden';
+  $form['field_ausleiher']['#value'] = $user->uid;
+
+  $options = array();
+  for ($i = 0; $i==count($avail_units); $i++){
+    $options[$i] = $i;
+    echo 'b';
+  }
+  print_r($options);
+
+  $form['field_einheiten']['#default_value'] = $params['einheiten'];
+  $form['field_einheiten']['#required'] = TRUE;
+  $form['field_einheiten']['#options'] = $options;
 
   $form['actions'] = array(
     '#type' => 'actions',
