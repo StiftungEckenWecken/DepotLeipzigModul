@@ -25,19 +25,19 @@ function depot_booking_edit_form($form, &$form_state, $booking) {
       }
     }
   }
-  if (!empty($required_params)){
-    // TODO: Route back
-    echo t('Missing or invalid params. If problem continues please inform admin.');
-    drupal_exit();
-  }
+  /*if (!empty($required_params)){
+    drupal_set_message(t('Fehlerhafte oder falsche Parameter. Bitte erneut probieren.'));
+    drupal_access_denied();
+  }*/
 
   // 2. Manually check again for availability of resources
   $avail_units = depot_get_available_units_by_rid($params['rid'], $params['start'], $params['end'], true);
-  if (empty($avail_units)){
+  echo $avail_units;
+  /*if (empty($avail_units)){
     // TODO: Route back
     echo t('Keine Ressourcen in diesem Zeitraum verfügbar');
-    drupal_exit();
-  }
+    drupal_access_denied();
+  }*/
 
   // 3. Add the field related form elements.
   $form_state['bat_booking'] = $booking;
@@ -48,12 +48,13 @@ function depot_booking_edit_form($form, &$form_state, $booking) {
     '#weight' => 99,
   );
 
+  $access = user_has_role(ROLE_ADMINISTRATOR); // || user_access('bypass bat_booking entities access')
+
   // Type author information for administrators.
   $form['author'] = array(
     '#type' => 'fieldset',
-    '#access' => FALSE,
-    //'#access' => user_access('bypass bat_booking entities access'),
-    '#title' => t('Authoring information'),
+    '#access' => $access,
+    '#title' => t('Anleger Informationen'),
     '#collapsible' => TRUE,
     '#collapsed' => TRUE,
     '#group' => 'additional_settings',
@@ -78,7 +79,7 @@ function depot_booking_edit_form($form, &$form_state, $booking) {
 
   $form['author']['author_name'] = array(
     '#type' => 'textfield',
-    '#title' => t('Authored by'),
+    '#title' => t('Eingestellt von'),
     '#maxlength' => 60,
     '#autocomplete_path' => 'user/autocomplete',
     '#default_value' => !empty($booking->author_name) ? $booking->author_name : '',
@@ -87,7 +88,7 @@ function depot_booking_edit_form($form, &$form_state, $booking) {
   );
   $form['author']['date'] = array(
     '#type' => 'textfield',
-    '#title' => t('Authored on'),
+    '#title' => t('Eingestellt am'),
     '#maxlength' => 25,
     '#description' => t('Format: %time. The date format is YYYY-MM-DD and %timezone is the time zone offset from UTC. Leave blank to use the time of form submission.', array('%time' => !empty($booking->date) ? date_format(date_create($booking->date), 'Y-m-d H:i:s O') : format_date($booking->created, 'custom', 'Y-m-d H:i:s O'), '%timezone' => !empty($booking->date) ? date_format(date_create($booking->date), 'O') : format_date($booking->created, 'custom', 'O'))),
     '#default_value' => !empty($booking->date) ? $booking->date : '',
@@ -95,7 +96,7 @@ function depot_booking_edit_form($form, &$form_state, $booking) {
 
   $form['options'] = array(
     '#type' => 'fieldset',
-    '#access' => user_access('bypass bat_booking entities access'),
+    '#access' => $access,
     '#title' => t('Publishing options'),
     '#collapsible' => TRUE,
     '#collapsed' => TRUE,
@@ -111,8 +112,17 @@ function depot_booking_edit_form($form, &$form_state, $booking) {
     '#default_value' => $booking->status,
   );
 
-  $form['field_ausleiher']['#type'] = 'hidden';
-  $form['field_ausleiher']['#value'] = $user->uid;
+  // Zusammenfassung Ressource
+
+  // Kontakt Ressourcen-Inhaber
+
+  // Zeitraum, Menge, Preis
+
+  // Übergabe:
+
+  $form['field_ausleiher_id']['#type'] = 'hidden';
+  $form['field_ausleiher_id']['#value'] = $user->uid;
+
 
   $options = array();
   for ($i = 0; $i==count($avail_units); $i++){
@@ -124,6 +134,7 @@ function depot_booking_edit_form($form, &$form_state, $booking) {
   $form['field_einheiten']['#default_value'] = $params['einheiten'];
   $form['field_einheiten']['#required'] = TRUE;
   $form['field_einheiten']['#options'] = $options;
+
 
   $form['actions'] = array(
     '#type' => 'actions',
@@ -194,9 +205,10 @@ function depot_booking_edit_form_submit(&$form, &$form_state) {
   }
 
   $booking->save();
-  drupal_set_message(t('Buchung gespeichert'));
+  drupal_set_message(t('Ihre Reservierung wurde gespeichert und der Ressourceninhaber informiert. Dieser wird sich mit Ihnen in Verbindung setzen.'));
 
-  $form_state['redirect'] = 'ressourcen';
+  $form_state['redirect'] = 'mein-depot/reservierungen';
+  
 }
 
 /**

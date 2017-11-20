@@ -13,6 +13,8 @@ function depot_ressource_delete_form_wrapper($type) {
  * Form callback: create or edit a ressource.
  */
 function depot_ressource_edit_form($form, &$form_state, $type) {
+  
+  global $user;
 
   $form['intro'] = array(
     '#markup' => '<p>'.t('Alle mit <span style="color:red;">*</span> markierten Felder sind auszufüllen. Verfügbarkeiten können im nächsten Schritt verwaltet werden.').'</p>',
@@ -87,18 +89,22 @@ function depot_ressource_edit_form($form, &$form_state, $type) {
   $form['price']['price_normal'] = $form['field_kosten'];
   $form['price']['price_discount'] = $form['field_kosten_2'];
   $form['price']['price_deposit'] = $form['field_kaution'];
+  $form['price']['price_mwst'] = $form['field_mwst'];
   $form['price']['price_granularity'] = $form['field_abrechnungstakt'];
   unset($form['field_kosten']);
   unset($form['field_kosten_2']);
   unset($form['field_kaution']);
   unset($form['field_abrechnungstakt']);
+  unset($form['field_mwst']);
   $form['price']['price_normal']['#prefix'] = '<div class="medium-3 column">';
   $form['price']['price_normal']['#suffix'] = '</div>';
   $form['price']['price_discount']['#prefix'] = '<div class="medium-3 column">';
   $form['price']['price_discount']['#suffix'] = '</div>';
-  $form['price']['price_deposit']['#prefix'] = '<div class="medium-3 column">';
+  $form['price']['price_deposit']['#prefix'] = '<div class="medium-2 column">';
   $form['price']['price_deposit']['#suffix'] = '</div>';
-  $form['price']['price_granularity']['#prefix'] = '<div class="medium-3 column">';
+  $form['price']['price_mwst']['#prefix'] = '<div class="medium-2 column">';
+  $form['price']['price_mwst']['#suffix'] = '</div>';
+  $form['price']['price_granularity']['#prefix'] = '<div class="medium-2 column">';
   $form['price']['price_granularity']['#suffix'] = '</div>';
 
   $form['adress'] = array(
@@ -111,10 +117,12 @@ function depot_ressource_edit_form($form, &$form_state, $type) {
   $form['adress']['field_adresse_postleitzahl'] = $form['field_adresse_postleitzahl'];
   $form['adress']['field_adresse_ort'] = $form['field_adresse_ort'];
   $form['adress']['field_bezirk'] = $form['field_bezirk'];
+  $form['adress']['field__ffnungszeiten'] = $form['field__ffnungszeiten'];
   unset($form['field_adresse_strasse']);
   unset($form['field_adresse_postleitzahl']);
   unset($form['field_adresse_ort']);
   unset($form['field_bezirk']);
+  unset($form['field__ffnungszeiten']);
   $form['adress']['field_adresse_strasse']['#prefix'] = '<div class="medium-4 column">';
   $form['adress']['field_adresse_strasse']['#suffix'] = '</div>';
   $form['adress']['field_adresse_postleitzahl']['#prefix'] = '<div class="medium-2 column">';
@@ -123,14 +131,46 @@ function depot_ressource_edit_form($form, &$form_state, $type) {
   $form['adress']['field_adresse_ort']['#suffix'] = '</div>';
   $form['adress']['field_bezirk']['#prefix'] = '<div class="medium-3 column">';
   $form['adress']['field_bezirk']['#suffix'] = '</div>';
-  
+
+  $form['uploads'] = array(
+    '#type' => 'container',
+    '#weight' => 17,
+    '#prefix' => '<fieldset class="medium-12 column fieldset-toggle'.(!empty($type->name) || true ? ' toggled' : '').'"><legend>'.t('Links, Anhänge & Textvorlagen').'</legend>',
+    '#suffix' => '</fieldset>'
+  );
+  $form['uploads']['link_i'] = $form['field_links_i'];
+  $form['uploads']['link_ii'] = $form['field_links_ii'];
+  $form['uploads']['link_iii'] = $form['field_links_iii'];
+  $form['uploads']['upload_i'] = $form['field_upload_i'];
+  $form['uploads']['upload_ii'] = $form['field_upload_ii'];
+  $form['uploads']['upload_i']['#prefix'] = '<div class="medium-6 column">';
+  $form['uploads']['upload_i']['#suffix'] = '</div>';
+  $form['uploads']['upload_ii']['#prefix'] = '<div class="medium-6 column">';
+  $form['uploads']['upload_ii']['#suffix'] = '</div><hr />';
+  $form['uploads']['upload_ii']['und'][0]['#description'] = '';
+  $form['uploads']['upload_ii']['#weight'] = 20;
+  $form['uploads']['buchungsbesaetigung'] = $form['field_text_buchungsbes_tigung'];
+  $form['uploads']['verleihvertrag'] = $form['field_verleihvertrag_'];
+  $form['uploads']['verleihvertrag_text'] = $form['field_verleihvertrag_text'];
+  unset($form['field_upload_i']);
+  unset($form['field_upload_ii']);  
+  unset($form['field_links_i']);
+  unset($form['field_links_ii']);
+  unset($form['field_links_iii']);
+  unset($form['field_text_buchungsbes_tigung']);
+  unset($form['field_verleihvertrag_']);
+  unset($form['field_verleihvertrag_text']);
+
+  if (!user_has_role($user->uid,'administrator'))
+      $form['field_aktiviert']['#access'] = FALSE;
+
+ # if ($formfield_verleihvertrag_)
 
   //$form['field_links_i']['und'][0]['#title'] = '<i class="fi fi-link"></i>';
   if (empty($type->field_links_i))
-      $form['field_links_ii']['#attributes']['class'][] = 'hide';
+      $form['uploads']['link_ii']['#attributes']['class'][] = 'hide';
   if (empty($type->field_links_ii))
-      $form['field_links_iii']['#attributes']['class'][] = 'hide';
-  
+      $form['uploads']['link_iii']['#attributes']['class'][] = 'hide';
   
 
   // Type author information for administrators.
@@ -297,7 +337,7 @@ function depot_ressource_edit_form($form, &$form_state, $type) {
       '#weight' => 45,
     );
   } else {
-    $form['actions']['submit']['#attributes']['class'] = array('button expand');
+    $form['actions']['submit']['#attributes']['class'] = array('button expand margin-top-ten');
   }
 
   $form['#validate'][] = 'depot_ressource_edit_form_validate';
@@ -311,6 +351,9 @@ function depot_ressource_edit_form($form, &$form_state, $type) {
 function depot_ressource_edit_form_validate(&$form, &$form_state) {
   // Notify field widgets to validate their data.
   entity_form_field_validate('bat_type', $form, $form_state);
+
+  // min. Ressourcen < Anzahl Einheiten?
+  // URL bei links richtig
 }
 
 /**

@@ -2,15 +2,9 @@
 
 use Roomify\Bat\Event\Event;
 
-/**
- * Implements hook_menu_alter()
- * Display admin-menues based on users role
- */
-function depot_menu_alter(&$items) {
-
-   $items['admin']['access callback'] = 'depot_admin_access_only';
-   
-}
+define('ROLE_ADMINISTRATOR', 3); // = 'Administrator'
+define('ROLE_ORGANISATION',  4); // = 'Authentifizierte Organisation'
+//menu_rebuild();
 
 function depot_admin_access_only() {
 
@@ -22,13 +16,87 @@ function depot_admin_access_only() {
   
 }
 
+function depot_auth_user_access_only() {
+
+  global $user;
+  return $user->uid;
+  
+}
+
+/**
+ * Implements hook_mail()
+ * Here we can modify (e.g. templating, il8n) mails before
+ * sending them out.
+ */
+function depot_mail($key, &$message, $params) {
+
+  user_mail_tokens($variables, $data, $options);
+
+  $message['subject'] = $params['subject'];
+  $message['body'][] = $params['body'];
+
+}
+
+/**
+ * Implements hook_menu_alter()
+ * Display menues & links based on users role
+ */
+function depot_menu_alter(&$items) {
+
+  //var_dump($items);
+
+   //$items['user/login']['access callback'] = 'depot_auth_user_access_only';
+   $items['admin']['access callback'] = 'depot_admin_access_only';
+
+}
+
+
+/**
+ * Implements hook_user_logout
+ */
+function depot_user_logout(){
+
+  session_destroy();
+  drupal_set_message(t('Sie haben sich erfolgreich vom Depot abgemeldet!'));
+  drupal_goto();
+
+}
+
+function depot_verfuegbarkeiten_ajax_callback($page_callback_result) {
+  // Only render content
+  $content = drupal_render($page_callback_result);
+
+  // Add CSS and JS files, add some markup
+  $html = '<html><head><title></title>' . drupal_get_css() . drupal_get_js() . '</head><body class="jquery-ajax-load">' . $content . '  <script type="text/javascript" src="http://drupal.localhost/sites/all/modules/bat/modules/bat_fullcalendar/js/bat_fullcalendar_timeline.js"></script></body></html>';
+  print $html;
+
+  drupal_page_footer();
+}
 
 /**
  * Implements hook_menu
  */
 function depot_menu() {
 
-  $items['buchungen/neu'] = array(
+  $items['user/%user/organisation'] = array(
+    'type' => MENU_LOCAL_TASK,
+    'title' => t('Organisation'),
+    'page callback' => 'depot_build_user_edit_organisation_form',
+    'description' => t('Depot-Konto als gemeinnützige Organisation führen'),
+    'access callback' => 'user_is_logged_in',
+    'page arguments' => array(1),
+  );
+
+  $items['ressourcen/%/verfuegbarkeiten'] = array(
+    'title' => t('Verfügbarkeiten ändern'),
+    'page callback' => 'depot_verfuegbarkeiten_calendar',
+    'description' => t('Verfügbarkeiten für alle Einheiten einer Ressource'),
+    'access callback' => 'user_is_logged_in',
+    'delivery callback' => 'depot_verfuegbarkeiten_ajax_callback',
+    'page arguments' => array(1),
+  );
+
+  $items['reservierungen/neu'] = array(
     'title' => t('Neue Buchung'),
     'page callback' => 'depot_buchung_neu_form',
     'description' => t('Neue Buchung anlegen'),
@@ -59,13 +127,115 @@ function depot_menu() {
   );
 
   $items['depot/check_availability'] = array(
-    'title' => NULL,
+    'title' => 'Check ressource availability',
     'page callback' => 'depot_ajax_check_availability',
-    'description' => 'AJAX method for resources'
+    'description' => 'AJAX method for resources',
+      'access callback' => 'user_is_logged_in'
   );
 
   return $items;
   
+}
+
+function depot_verfuegbarkeiten_calendar($unit_type){
+
+  $event_type = 'depot_availability';
+
+  if (empty($unit_type) || !is_integer($unit_type)){
+    drupal_not_found();
+  }
+
+  global $user;
+
+  $ev_type = bat_event_type_load($event_type);
+
+  // Check if current type support this event type.
+  if ($type = bat_type_load($unit_type)) {
+    $type_bundle = bat_type_bundle_load($type->type);
+
+    if (is_array($type_bundle->default_event_value_field_ids)) {
+      if (!(isset($type_bundle->default_event_value_field_ids[$event_type]) && !empty($type_bundle->default_event_value_field_ids[$event_type]))) {
+        return drupal_not_found();
+      }
+    }
+    else {
+      return drupal_not_found();
+    }
+  }
+  elseif ($unit_type != 'all') {
+    return drupal_not_found();
+  }
+
+  // Check if user has permission to view calendar data for this event type.
+  if (!user_has_role(ROLE_ADMINISTRATOR) || $type->uid != $user->uid) {
+   // TODO: return drupal_access_denied();
+  }
+
+  // Pick what modal style to use.
+  $calendar_settings['modal_style'] = 'default';
+ /*
+  $modal_style = array(
+    'bat-modal-style' => array(
+      'modalSize' => array(
+        'type' => 'fixed',
+        'width' => 520,
+        'height' => 520,
+        'addWidth' => 0,
+        'addHeight' => 0,
+      ),
+      'modalOptions' => array(
+        'opacity' => .0,
+        'background-color' => '#000',
+      ),
+      'animation' => 'fadeIn',
+    ),
+  );
+  */
+  if ($type = bat_event_type_load($event_type)) {
+    $event_granularity = $type->event_granularity;
+  }
+  else {
+    $event_granularity = 'both';
+  }
+
+  // All Drupal JS settings inside the batCalendar object.
+  $fc_user_settings = array(
+    'batCalendar' => array(
+      array(
+        'unitType' => $unit_type,
+        'eventType' => $event_type,
+        'eventGranularity' => $event_granularity,
+      ),
+    ),
+  );
+
+  $calendar_settings['user_settings'] = $fc_user_settings;
+  $calendar_settings['calendar_id'] = 'fullcalendar-scheduler';
+
+  if ($ev_type->fixed_event_states) {
+    $calendar_settings['class'] = array('fixed_event_states');
+  }
+  else {
+    $calendar_settings['class'] = array('open_event_states');
+  }
+
+  drupal_add_css(drupal_get_path('module', 'bat_event_ui') . '/css/bat_event_ui.css');
+
+  $render_array = array(
+    //'event_type_form' => drupal_get_form('bat_event_ui_event_type_form', $unit_type, $event_type),
+    //'bulk_update_form' => array(),
+    'calendar' => array(
+      '#theme' => 'bat_fullcalendar',
+      '#calendar_settings' => $calendar_settings,
+    ),
+  );
+
+  if ($ev_type->fixed_event_states) {
+   // $render_array['bulk_update_form'] = drupal_get_form('bat_event_ui_bulk_update_form', $unit_type, $event_type);
+  }
+
+  return $render_array;
+
 }
 
 /* Wrapper to handle availability requests */
@@ -116,6 +286,18 @@ function depot_ajax_check_availability(){
     
    return drupal_json_output($matches);
   }
+}
+
+/** 
+ * Called by path user/%/organisation
+ */
+function depot_build_user_edit_organisation_form(){
+
+  include_once('forms/depot_user_edit_organisation_form.php');
+  $form = drupal_get_form('depot_user_edit_organisation_form');
+
+  return drupal_render($form);
+
 }
 
 /**
@@ -175,35 +357,12 @@ function depot_preprocess_views_view_table(&$vars) {
 }
 
 /**
- * Implements hook_views_pre_render
- * Hides unwanted fields
- */
-function depot_views_pre_render(&$view) {
-  //print_r($view);
-  global $user;
-  
-  if (!in_array('authenticated user', $user->roles)) {
-    // bookings/new
-    // unset($view->field['field_to_hide']);
-  }
-}
-
-
-/*views-view-field.tpl.php
--> Mache Feld Bezirk (ID: field_bezirk) automatisch zu Link
--> Feld Kategorie (ID: field_kategorie) zu Link!*/
-
-
-/**
  * Implements hook_form_alter
  * Turns "kategorie"- and "bezirk"-state-id-filter into select-field
  * TODO: Add caching
  * TODO: Sort #options via sort()
  */
-
 function depot_form_alter(&$form, &$form_state, $form_id) {
-
-//print_r($form);
 
   switch ($form_id){
     
@@ -223,6 +382,42 @@ function depot_form_alter(&$form, &$form_state, $form_id) {
     break;
     
   }
+}
+
+/**
+ * Implements hook_user_view().
+ */
+function depot_user_view($account, $view_mode) {
+
+  global $user;
+
+  // TODO: 2 forms, seperated by hr. Form 1: inputs from $user
+
+  $text = '<h3>'.t('Ihr Depot Konto').'</h3>';
+  $text .= '<p>'.t('Hier können Sie bestehende Kontaktdaten ändern oder Ihr Konto als Organisation betreiben.') .'</p>';
+  $text .= '<p>'.t('Sie haben noch offene Fragen oder möchten Ihr Konto deaktivieren lassen? Bitte wenden Sie sich <a href="/contact" title="Kontaktformular">direkt an uns</a>.').'</p><hr />';
+ 
+  $account->content['intro'] = array(
+      '#type' => 'user_profile_item',
+      '#markup' => $text,
+      '#title' => '',
+      '#attributes' => array('class' => array('user-page-intro-text')),
+  );
+
+  if (user_has_role(ROLE_ORGANISATION)){
+    $text = '<p>'.t('<strong>Gemeinwohlanerkennung: <span style="color:green;">Aktiv</span></strong></p><hr />').'</p>';
+  } else {
+    $text = '<p>'.t('<strong>Gemeinwohlanerkennung: <span style="color:red;">Inaktiv</span></strong></p><hr />').'</p>';
+  }
+  
+  $account->content['field_is_organisation'] = array(
+      '#type' => 'user_profile_item',
+      '#markup' => $text,
+      '#weight' => 5,
+      '#title' => '',
+      '#attributes' => array('class' => array('user-page-is-organisation')),
+  );
+
 }
 
 /**
@@ -309,7 +504,7 @@ function depot_units_bulk_action($action = 'add', $units_name, $type_id, $total_
 
     if ($action == 'add'){
 
-      for ($i = 0; $i <= $total_units; $i++) {
+      for ($i = 1; $i <= $total_units; $i++) {
           $unit = bat_unit_create(array('type' => 'default'));
           $unit->name = $units_name . ' ' . $i;
           $unit->created = REQUEST_TIME;
