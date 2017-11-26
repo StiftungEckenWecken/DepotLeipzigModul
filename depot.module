@@ -4,7 +4,10 @@ use Roomify\Bat\Event\Event;
 
 define('ROLE_ADMINISTRATOR', 3); // = 'Administrator'
 define('ROLE_ORGANISATION',  4); // = 'Authentifizierte Organisation'
-//menu_rebuild();
+define('ROLE_ORGANISATION_NAME', 'Authentifizierte Organisation');
+define('ROLE_ADMINISTRATOR_NAME', 'Administrator');
+
+// 4 debug: menu_rebuild();
 
 function depot_admin_access_only() {
 
@@ -103,27 +106,19 @@ function depot_menu() {
     'access callback' => 'user_is_logged_in'
   );
 
-  /*'args'     => array(
-          array(
-            'name'         => 'unit_ids',
-            'type'         => 'string',
-            'description'  => t('Unit IDs'),
-            'source'       => array('param' => 'unit_ids'),
-            'optional'     => TRUE,
-          ),
-          array(
-            'name'         => 'unit_types',
-            'type'         => 'string',
-            'description'  => t('Unit Types'),
-            'source'       => array('param' => 'unit_types'),
-            'optional'     => TRUE,
-          ),*/
-
   $items['ressourcen/neu'] = array(
     'title' => t('Neue Ressource anlegen'),
-    'page callback' => 'depot_ressource_neu_form',
+    'page callback' => 'depot_ressource_form',
     'description' => t('Neue Ressource anlegen'),
     'access callback' => 'user_is_logged_in'
+  );
+
+  $items['ressourcen/%/edit'] = array(
+    'title' => t('Ressource bearbeiten'),
+    'page callback' => 'depot_ressource_form',
+    'description' => t('Ressource bearbeiten'),
+    'access callback' => 'user_is_logged_in',
+    'page arguments' => array(1),
   );
 
   $items['depot/check_availability'] = array(
@@ -319,19 +314,25 @@ function depot_buchung_neu_form($type = 'standard'){
 }
 
 /**
- * Called by path ressourcen/neu
+ * Called by path ressourcen/neu OR /ressouren/%/edit
  * Presents a booking form, based on BAT Booking module
  */
-function depot_ressource_neu_form($type = 'depot'){
+function depot_ressource_form($type_id = null){
 
   global $user;
 
-  $booking = bat_type_create(array('type' => $type, 'uid' => $user->uid));
-  $booking->created = REQUEST_TIME;
-  $booking->author_name = $user->name;
-  $booking->status = 1;
+  if (empty($type_id)){
+    $booking = bat_type_create(array('type' => 'depot', 'uid' => $user->uid));
+    $booking->created = REQUEST_TIME;
+    $booking->author_name = $user->name;
+    $booking->status = 1;
+
+  } else {
+    $booking = bat_type_load($type_id);
+  }
 
   include_once('forms/depot_ressource_form.php');
+
 
   return drupal_get_form('depot_ressource_edit_form', $booking);
 
@@ -423,8 +424,8 @@ function depot_user_view($account, $view_mode) {
 /**
  * function depot_get_available_units_by_rid
  * @param string rid
- * @param string $start_date
- * @param string $end_date
+ * @param string $start_date (Y-m-d H:i)
+ * @param string $end_date (Y-m-d H:i)
  * @param bool $format
  * @return array $events / [if $format:] array $event_ids
  */

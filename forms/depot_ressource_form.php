@@ -4,8 +4,6 @@
  * Form callback wrapper: delete a ressource.
  */
 function depot_ressource_delete_form_wrapper($type) {
-  // Add the breadcrumb for the form's location.
-  bat_type_set_breadcrumb();
   return drupal_get_form('depot_ressource_delete_form', $type);
 }
 
@@ -47,7 +45,9 @@ function depot_ressource_edit_form($form, &$form_state, $type) {
     '#type' => 'vertical_tabs',
     '#weight' => 99,
   );
-  
+
+  $form['#token'] = FALSE;
+
   // Depot related styling
   foreach ($form as $title => $field){
     if (is_array($field) && strpos($title,'field') >= 0){
@@ -161,7 +161,7 @@ function depot_ressource_edit_form($form, &$form_state, $type) {
   unset($form['field_verleihvertrag_']);
   unset($form['field_verleihvertrag_text']);
 
-  if (!user_has_role($user->uid,'administrator'))
+  if (!user_has_role(ROLE_ADMINISTRATOR))
       $form['field_aktiviert']['#access'] = FALSE;
 
  # if ($formfield_verleihvertrag_)
@@ -321,21 +321,24 @@ function depot_ressource_edit_form($form, &$form_state, $type) {
     '#submit' => $submit + array('depot_ressource_edit_form_submit'),
   );
   $form['actions']['submit']['#attributes']['class'] = array('button');
+  $form['actions']['submit']['#attributes']['class'] = array('button expand margin-top-ten');
   
   // If !new form, add more options
-  if (!empty($type->name) && bat_type_access('delete', $type)) {
+  if (!empty($type->name)) {
 
-    $form['actions']['availabilities'] = array(
+    $form['field_agb']['#type'] = 'hidden';
+
+    /*$form['actions']['availabilities'] = array(
       '#markup' => '<a href="#" title="'.t('Verfügbarkeiten bearbeiten').'" class="button"><fi class="fi fi-calendar"></i> '.t('Verfügbarkeiten bearbeiten').'</a>',
-    );
+    );*/
 
-    $form['actions']['delete'] = array(
+    /*$form['actions']['delete'] = array(
       '#type' => 'submit',
       '#value' => t('Ressource löschen'),
       '#suffix' => l(t('Abbrechen'), 'ressourcen'),
       '#submit' => $submit + array('depot_ressource_form_submit_delete'),
       '#weight' => 45,
-    );
+    );*/
   } else {
     $form['actions']['submit']['#attributes']['class'] = array('button expand margin-top-ten');
   }
@@ -349,17 +352,19 @@ function depot_ressource_edit_form($form, &$form_state, $type) {
  * Form API validate callback for the booking type form.
  */
 function depot_ressource_edit_form_validate(&$form, &$form_state) {
-  // Notify field widgets to validate their data.
-  entity_form_field_validate('bat_type', $form, $form_state);
 
+  entity_form_field_validate('bat_type', $form, $form_state);
+  //print_r($form); exit(); 
   // min. Ressourcen < Anzahl Einheiten?
-  // URL bei links richtig
+  // URL bei links richtig?
 }
 
 /**
  * Form API submit callback for the type form.
  */
 function depot_ressource_edit_form_submit(&$form, &$form_state) {
+
+  $newEntity = (empty($type->type_id));
 
   $type = entity_ui_controller('bat_type')->entityFormSubmitBuildEntity($form, $form_state);
   $type->created = !empty($type->date) ? strtotime($type->date) : REQUEST_TIME;
@@ -397,9 +402,12 @@ function depot_ressource_edit_form_submit(&$form, &$form_state) {
 
   $type->save();
 
-  depot_units_bulk_action('add', $type->name, $type->type_id, $form_state['values']['field_anzahl_einheiten']['und'][0]['value']);
-
-  drupal_set_message(t('Ressource @name gespeichert', array('@name' => $type->name)));
+  if ($newEntity){
+    depot_units_bulk_action('add', $type->name, $type->type_id, $form_state['values']['field_anzahl_einheiten']['und'][0]['value']);
+    drupal_set_message(t('Ressource "@name" wurde gespeichert und wartet nun auf Aktivierung.', array('@name' => $type->name)));    
+  } else {
+    drupal_set_message(t('Ressource "@name" wurde aktualisiert.', array('@name' => $type->name)));
+  }
 
   $form_state['redirect'] = 'ressourcen/'.$type->type_id;
 }
