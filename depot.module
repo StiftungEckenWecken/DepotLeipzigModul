@@ -100,10 +100,26 @@ function depot_menu() {
   );
 
   $items['reservierungen/neu'] = array(
-    'title' => t('Neue Buchung'),
-    'page callback' => 'depot_buchung_neu_form',
-    'description' => t('Neue Buchung anlegen'),
+    'title' => t('Neue Reservierung'),
+    'page callback' => 'depot_buchung_form',
+    'description' => t('Neue Reservierung anlegen'),
     'access callback' => 'user_is_logged_in'
+  );
+
+  $items['reservierungen/%'] = array(
+    'title' => t('Reservierungsdetails'),
+    'page callback' => 'depot_buchung_detail',
+    'description' => t('Reservierung einsehen'),
+    'access callback' => 'user_is_logged_in',
+    'page arguments' => array(1),
+  );
+
+  $items['reservierungen/%/edit'] = array(
+    'title' => t('Reservierung bearbeiten'),
+    'page callback' => 'depot_buchung_form',
+    'description' => t('Reservierung bearbeiten'),
+    'access callback' => 'user_is_logged_in',
+    'page arguments' => array(1),
   );
 
   $items['ressourcen/neu'] = array(
@@ -250,6 +266,33 @@ function depot_ajax_check_availability(){
   drupal_exit();
 }
 
+function depot_get_units_count($rid){
+  
+  $query = db_select('bat_units', 'u')
+           ->fields('u', array('type_id'))
+           ->condition('type_id', $rid)
+           ->execute();
+
+  return $query->rowCount();
+
+}
+
+function depot_add_units($type_id, $units_name, $total_units){
+
+  global $user;
+
+  for ($i = 1; $i <= $total_units; $i++) {
+    $unit = bat_unit_create(array('type' => 'default'));
+    $unit->name = $units_name . ' ' . $i;
+    $unit->created = REQUEST_TIME;
+      
+    $unit->type_id = $type_id;
+    $unit->default_state = 1;
+    $unit->uid = $user->uid;
+    $unit->save();
+  }
+}
+
 //function depot_check_availability($rid, $start, $end, $units = 1){
   function depot_check_availability(){
 
@@ -257,12 +300,7 @@ function depot_ajax_check_availability(){
   //$start = new DateTime($start);
   //$end = new DateTime($end);
 
-  $query = db_select('bat_units', 'u')
-           ->fields('u', array('type_id'))
-           ->condition('type_id', $rid)
-           ->execute();
-
-  $unitsCount = $query->rowCount();
+  $unitsCount = depot_get_units_count($rid);
       
   if (!$unitsCount) {
     return t('Unbekannte Ressource');
@@ -295,18 +333,33 @@ function depot_build_user_edit_organisation_form(){
 
 }
 
+/** 
+ * Called by path reservierungen/%id
+ * Only show booking details & state
+ */
+function depot_buchung_detail($booking_id){
+
+  $_SESSION['detail_only_mode'] = true;
+  return depot_buchung_form($booking_id);
+
+}
+
 /**
  * Called by path buchungen/neu
  * Presents a booking form, based on BAT Booking module
  */
-function depot_buchung_neu_form($type = 'standard'){
+function depot_buchung_form($booking_id = null){
 
   global $user;
 
-  $booking = bat_booking_create(array('type' => $type, 'uid' => $user->uid));
-  $booking->created = REQUEST_TIME;
-  $booking->author_name = $user->name;
-  $booking->status = 1;
+  if (isset($booking_id)){
+    $booking = bat_booking_load($booking_id);
+  } else {
+    $booking = bat_booking_create(array('type' => 'standard', 'uid' => $user->uid));
+    $booking->created = REQUEST_TIME;
+    $booking->author_name = $user->name;
+    $booking->status = 1;
+  }
 
   include_once('forms/depot_buchung_form.php');
   return drupal_get_form('depot_booking_edit_form', $booking);
@@ -322,19 +375,18 @@ function depot_ressource_form($type_id = null){
   global $user;
 
   if (empty($type_id)){
-    $booking = bat_type_create(array('type' => 'depot', 'uid' => $user->uid));
-    $booking->created = REQUEST_TIME;
-    $booking->author_name = $user->name;
-    $booking->status = 1;
+    $type = bat_type_create(array('type' => 'depot', 'uid' => $user->uid));
+    $type->created = REQUEST_TIME;
+    $type->author_name = $user->name;
+    $type->status = 1;
 
   } else {
-    $booking = bat_type_load($type_id);
+    $type = bat_type_load($type_id);
   }
 
   include_once('forms/depot_ressource_form.php');
 
-
-  return drupal_get_form('depot_ressource_edit_form', $booking);
+  return drupal_get_form('depot_ressource_edit_form', $type);
 
 }
 
@@ -496,26 +548,63 @@ function depot_get_kategorien($format = false){
   
 }
 
-/**
- * Add or remove units for certain ressource
+function depot_form_goto($link){
+
+  if (!user_has_role(ROLE_ADMINISTRATOR)){
+    drupal_goto($link);
+  }
+
+}
+
+/** 
+ * Wrapper to set [and manipulate] event states 
+ * Context = Form 
  */
-function depot_units_bulk_action($action = 'add', $units_name, $type_id, $total_units){
+function depot_events_bulk_action($type_id, $total_units, $begin, $end){
+
+  $free_units = depot_get_available_units_by_rid($type_id, $begin, $end);
+  // If meanwhile there was an order: Reduce units number
+  $total_units = (count($free_units) < $total_units) ? count($free_units) : $total_units;
+
+  // Simulate form context
+  $context = array(
+    'form_values' => array(
+      'bat_start_date' => $begin,
+      'bat_end_date' => $end,
+      'event_state' => 'gebucht',
+      'event_type' => 'depot_availability'
+    )
+  );
+
+  for ($i = 0; $i <= $total_units; $i++) {
+    $unit = bat_unit_load(str_replace('S','',$free_units[$i]['resourceId']));
+    bat_event_unit_set_state($unit, $context);
+  }
+}
+
+/**
+ * Wrapper to do CRUD actions on ressource-unit's
+ */
+function depot_units_bulk_action($action, $units_name, $type_id, $total_units){
     
     global $user;
 
     if ($action == 'add'){
 
-      for ($i = 1; $i <= $total_units; $i++) {
-          $unit = bat_unit_create(array('type' => 'default'));
-          $unit->name = $units_name . ' ' . $i;
-          $unit->created = REQUEST_TIME;
-      
-          $unit->type_id = $type_id;
-          $unit->default_state = 1;
-          $unit->uid = $user->uid;
-          $unit->save();
+      depot_add_units($type_id, $units_name, $total_units);
+
+    } else if ($action == 'edit'){
+
+      $units = depot_get_units_count($type_id);
+      echo $units; exit();  
+      if ($units > $total_units){
+        // remove
+      } else if ($units < $total_units){
+        depot_add_units($type_id, $units_name, $total_units-$units);
       }
 
+    } else if ($action == 'remove'){
+      // remove
     }
 
 }
