@@ -84,6 +84,7 @@ function depot_booking_edit_form($form, &$form_state, $booking) {
   $ressource = bat_type_load($params['rid']);
   $ressource = get_object_vars($ressource);
   $user_is_organisation = in_array(ROLE_ORGANISATION_NAME ,$user->roles);
+  $user_is_anbieter = ($anbieter->uid === $user->uid);
   $anbieter = user_load($ressource['revision_uid']);
   $anbieter->is_organisation = in_array(ROLE_ORGANISATION_NAME ,$anbieter->roles);
   $allow_change = (user_has_role(ROLE_ADMINISTRATOR) || $edit_mode);  
@@ -96,6 +97,7 @@ function depot_booking_edit_form($form, &$form_state, $booking) {
     // hourly
     $total_time = $begin->diff($end)->format('%H:%I');   
   }
+
   if (!$edit_mode){
 
     if (empty($avail_units)){
@@ -155,7 +157,7 @@ function depot_booking_edit_form($form, &$form_state, $booking) {
 
   $preis = machine_to_human_price($preis);
 
-  // Add the field related form elements.
+  // Add the field related form elements of bat_booking entity
   $form_state['bat_booking'] = $booking;
 
   // Build columns for header panel 
@@ -194,10 +196,21 @@ function depot_booking_edit_form($form, &$form_state, $booking) {
      <hr /><p><strong>'. t('Brutto') .'</strong>: '. $preis['preis_total'] .'€</p>
     </div>';
   
+  $status_col = null;
 
-  // If edit: Status -> bestätigt?
+  if ($edit_mode){
+    if ($booking->field_genehmigt['und'][0]['value'] == 0){
+      $status_col = '<div id="booking-status">'.t('Buchungsstatus').': <strong>'. t('Ausstehend').'</strong></div>';
+    } else {
+      $status_col = '<div id="booking-status" class="genehmigt"><i class="fi fi-checkbox"></i> '.t('Buchungsstatus').': <strong>'.t('Akzeptiert').'</strong></div>';      
+    }
+    if ($user_is_anbieter){
+      $status_col .= '<a href="/reservierungen/'.$booking->booking_id.'/change_status" class="float-right">'.t('Status ändern').'</a>';
+    }
+  }
+  
   $form['buchung_header'] = array(
-   '#markup' => '<div id="buchung-header" class="panel callout row"><div class="medium-12 column"><h5>Ihre Reservierung</h5><hr /></div>'. $res_col . $time_col . $price_col . '</div>',
+   '#markup' => '<div id="buchung-header" class="panel callout row"><div class="medium-12 column"><h5 class="left">'.t('Ihre Reservierung').'</h5>'.$status_col.'<hr /></div>'. $res_col . $time_col . $price_col . '</div>',
    '#weight' => -98
   );
 
@@ -420,7 +433,6 @@ function depot_booking_edit_form_submit(&$form, &$form_state) {
     /*
      depot:
      Setze Anzahl x units auf ausgebucht:
-          depot_events_bulk_action($anzahl_units, $type_id, $form_state)
      Generiere Verleihvertrag
      Mail an Anbieter
      Mail an Interessent

@@ -122,6 +122,14 @@ function depot_menu() {
     'page arguments' => array(1),
   );
 
+  $items['reservierungen/%/change_status'] = array(
+    'title' => t('Reservierungsstatus ändern'),
+    'page callback' => 'depot_buchung_change_status',
+    'description' => t('Reservierungsstatus ändern'),
+    'access callback' => 'user_is_logged_in',
+    'page arguments' => array(1),
+  );
+
   $items['ressourcen/neu'] = array(
     'title' => t('Neue Ressource anlegen'),
     'page callback' => 'depot_ressource_form',
@@ -341,6 +349,38 @@ function depot_buchung_detail($booking_id){
 
   $_SESSION['detail_only_mode'] = true;
   return depot_buchung_form($booking_id);
+
+}
+
+/** 
+ * Called by path reservierungen/%id/change_status
+ */
+function depot_buchung_change_status($booking_id){
+  
+  global $user;
+  $booking = bat_booking_load($booking_id);
+
+  if (!user_has_role(ROLE_ADMINISTRATOR) && $booking->field_verleiher['und'][0]['value'] != $user->uid){
+    drupal_goto('mein-depot');
+  }
+  
+  if (!empty($_POST)){
+    
+    $booking->changed = time();
+    $booking->field_genehmigt['und'][0]['value'] = ($booking->field_genehmigt['und'][0]['value'] == 0) ? 1 : 0;
+    $booking->save();
+
+    // Send mail to ausleiher...
+
+    drupal_set_message(t('Die Reservierung wurde genehmigt und der Interessent benachrichtigt!'));
+    drupal_goto('mein-depot/reservierungen');
+
+  } else {
+    $newStatus = ($booking->field_genehmigt['und'][0]['value'] == 0) ? t('akzeptiert') : t('abgewiesen');
+    $div = '<div id="status-change-panel" class="medium-12 panel">'.t('Möchten Sie den Status für die Reservierung auf <strong>@status</strong> setzen?', array('@status'=>$newStatus));
+    $div .= '<br /><br /><form method="post" action="#"><input type="hidden" name="bla" value="bla" /><input type="submit" class="button" value="'.t('Status ändern').'"></form><a href="/mein-depot/reservierungen">'.t('Abbrechen').'</a></div>';
+    return $div;
+  }
 
 }
 
@@ -596,7 +636,6 @@ function depot_units_bulk_action($action, $units_name, $type_id, $total_units){
     } else if ($action == 'edit'){
 
       $units = depot_get_units_count($type_id);
-      echo $units; exit();  
       if ($units > $total_units){
         // remove
       } else if ($units < $total_units){

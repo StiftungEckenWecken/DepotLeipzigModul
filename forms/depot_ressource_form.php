@@ -373,7 +373,7 @@ function depot_ressource_edit_form_validate(&$form, &$form_state) {
  */
 function depot_ressource_edit_form_submit(&$form, &$form_state) {
 //print_r($form); exit();
-  $newEntity = !(empty($type->type_id));
+  $newEntity = (empty($type->type_id));
 
   $type = entity_ui_controller('bat_type')->entityFormSubmitBuildEntity($form, $form_state);
   $type->created = !empty($type->date) ? strtotime($type->date) : REQUEST_TIME;
