@@ -130,6 +130,13 @@ function depot_menu() {
     'page arguments' => array(1),
   );
 
+  $items['reservierungen/%/delete'] = array(
+    'title' => t('Reservierung löschen'),
+    'page callback' => 'depot_buchung_delete',
+    'access callback' => 'user_is_logged_in',
+    'page arguments' => array(1),
+  );
+
   $items['ressourcen/neu'] = array(
     'title' => t('Neue Ressource anlegen'),
     'page callback' => 'depot_ressource_form',
@@ -347,8 +354,29 @@ function depot_build_user_edit_organisation_form(){
  */
 function depot_buchung_detail($booking_id){
 
-  $_SESSION['detail_only_mode'] = true;
   return depot_buchung_form($booking_id);
+
+}
+
+/**
+ * Called by path reservierungen/%id/delete
+ */
+function depot_buchung_delete($booking_id){
+  
+  global $user;
+  $booking = bat_booking_load($booking_id);
+  $booking_proxy = get_object_vars($booking);
+
+  if (empty($booking) || (!user_has_role(ROLE_ADMINISTRATOR) && $booking_proxy->field_verleiher['und'][0]['value'] != $user->uid && $booking_proxy->field_ausleiher['und'][0]['value'] != $user->uid)){
+    drupal_access_denied();
+  }
+
+  // TODO: Remove connected units
+  // TODO: Send mail
+
+  $booking->delete();
+  drupal_set_message(t('Die Reservierung wurde erfolgreich storniert und Ver- bzw. Entleiher informiert.'));
+  drupal_goto('ressourcen');
 
 }
 
