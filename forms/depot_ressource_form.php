@@ -412,7 +412,7 @@ function depot_ressource_edit_form_submit(&$form, &$form_state) {
 
   if ($newEntity){
     depot_units_bulk_action('add', $type->name, $type->type_id, $form_state['values']['field_anzahl_einheiten']['und'][0]['value']);
-    drupal_set_message(t('Ressource "@name" wurde gespeichert und wartet nun auf Aktivierung.', array('@name' => $type->name)));    
+    drupal_set_message(t('Ressource "@name" wurde gespeichert und wartet nun auf Aktivierung. Sie können Sperrzeiten jederzeit unter "Verfügbarkeiten ändern" festlegen.', array('@name' => $type->name)));    
   } else {
     depot_units_bulk_action('edit', $type->name, $type->type_id, $form_state['values']['field_anzahl_einheiten']['und'][0]['value']);    
     drupal_set_message(t('Ressource "@name" wurde aktualisiert.', array('@name' => $type->name)));

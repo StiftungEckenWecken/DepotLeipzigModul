@@ -74,7 +74,6 @@ function depot_booking_edit_form($form, &$form_state, $booking) {
   }*/
 
   // 2. Manually check again for availability of resources
-  $avail_units = count(depot_get_available_units_by_rid($params['rid'], $begin_bat, $end_bat, true));
 
   $begin_bat = date_format($begin, 'Y-m-d H:i');
   $end_bat = date_format($end, 'Y-m-d H:i');
@@ -84,8 +83,8 @@ function depot_booking_edit_form($form, &$form_state, $booking) {
   $ressource = bat_type_load($params['rid']);
   $ressource = get_object_vars($ressource);
   $user_is_organisation = in_array(ROLE_ORGANISATION_NAME ,$user->roles);
-  $user_is_anbieter = ($anbieter->uid === $user->uid);
   $anbieter = user_load($ressource['revision_uid']);
+  $user_is_anbieter = ($anbieter->uid === $user->uid);  
   $anbieter->is_organisation = in_array(ROLE_ORGANISATION_NAME ,$anbieter->roles);
   $allow_change = (user_has_role(ROLE_ADMINISTRATOR) || $edit_mode);  
 
@@ -115,7 +114,7 @@ function depot_booking_edit_form($form, &$form_state, $booking) {
       depot_form_goto('ressourcen');
     }
 
-    if (isset($ressource['field_gemeinwohl']['und'][0]['value']) && !$user_is_organisation){
+    if (isset($ressource['field_gemeinwohl']['und'][0]['value']) && $ressource['field_gemeinwohl']['und'][0]['value'] && !$user_is_organisation){
       drupal_set_message(t('Dieses Angebot steht nur für gemeinnützig anerkannte Organisationen zur Verfügung.'),'error');
       depot_form_goto('ressourcen/'.$params['rid']);
     }
@@ -128,7 +127,7 @@ function depot_booking_edit_form($form, &$form_state, $booking) {
     // Calculate price
     $preis = array();
 
-    $preis['res_preis'] = (isset($ressource['field_gemeinwohl']['und'][0]['value'])) ? $ressource['field_kosten_2']['und'][0]['value'] : $ressource['field_kosten']['und'][0]['value'];
+    $preis['res_preis'] = (isset($ressource['field_gemeinwohl']['und'][0]['value']) && $ressource['field_gemeinwohl']['und'][0]['value']) ? $ressource['field_kosten_2']['und'][0]['value'] : $ressource['field_kosten']['und'][0]['value'];
     $preis['res_kaution'] = (isset($ressource['field_kaution']['und'][0]['value'])) ? $ressource['field_kaution']['und'][0]['value'] : 0;
     $preis['res_takt'] = $ressource['field_abrechnungstakt']['und'][0]['value'];
     $preis['res_tax'] = (isset($ressource['field_mwst']['und'])) ? $ressource['field_mwst']['und'][0]['value'] : 0;
@@ -214,7 +213,8 @@ function depot_booking_edit_form($form, &$form_state, $booking) {
    '#weight' => -98
   );
 
-  if (isset($_SESSION['detail_only_mode'])){
+  if (isset($_SESSION['detail_only_mode']) && $_SESSION['detail_only_mode']){
+    $_SESSION['detail_only_mode'] = false;
     unset($_SESSION['detail_only_mode']);
     return $form;
   }

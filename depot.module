@@ -187,7 +187,7 @@ function depot_verfuegbarkeiten_calendar($unit_type){
 
   // Check if user has permission to view calendar data for this event type.
   if (!user_has_role(ROLE_ADMINISTRATOR) || $type->uid != $user->uid) {
-   // TODO: return drupal_access_denied();
+    drupal_access_denied();
   }
 
   // Pick what modal style to use.
@@ -527,7 +527,7 @@ function depot_get_available_units_by_rid($rid, $start_date, $end_date, $format 
   include_once $modulePath .'/bat_api.module';
 
   $events = bat_api_services_events_index_calendar(0, $rid, $start_date, $end_date, 'depot_availability', TRUE);  
-
+  
   if ($format){
     $event_ids = array();
     $clean_up_ids = array();
@@ -596,11 +596,17 @@ function depot_form_goto($link){
 
 }
 
+function depot_bat_calendar_settings_alter(&$calendar_settings) {
+  // Manual mods
+  $calendar_settings['batCalendar'][0]['viewsTimelineThirtyDayButtonText'] = '~30 days~';
+  $calendar_settings['batCalendar'][0]['viewsTimelineThirtyDaySlotDuration'] = '6:00';
+}
+
 /** 
  * Wrapper to set [and manipulate] event states 
- * Context = Form 
+ * Yet only supports add method
  */
-function depot_events_bulk_action($type_id, $total_units, $begin, $end){
+function depot_events_bulk_action($type_id, $total_units, $begin, $end, $event_state = 'gebucht'){
 
   $free_units = depot_get_available_units_by_rid($type_id, $begin, $end);
   // If meanwhile there was an order: Reduce units number
@@ -611,12 +617,12 @@ function depot_events_bulk_action($type_id, $total_units, $begin, $end){
     'form_values' => array(
       'bat_start_date' => $begin,
       'bat_end_date' => $end,
-      'event_state' => 'gebucht',
+      'event_state' => $event_state,
       'event_type' => 'depot_availability'
     )
   );
 
-  for ($i = 0; $i <= $total_units; $i++) {
+  for ($i = 1; $i <= $total_units; $i++) {
     $unit = bat_unit_load(str_replace('S','',$free_units[$i]['resourceId']));
     bat_event_unit_set_state($unit, $context);
   }
