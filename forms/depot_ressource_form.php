@@ -48,26 +48,24 @@ function depot_ressource_edit_form($form, &$form_state, $type) {
     '#weight' => 99,
   );
 
-  $form['#token'] = FALSE;
+  $form['#token'] = FALSE; // Temp; To avoid errors with cached form tokens
 
-  // Depot related styling
-  /*foreach ($form as $title => $field){
-    if (is_array($field) && strpos($title,'field') >= 0){
-      $form[$title]['#attributes']['class'][] = 'column';
-    }
-  }*/
   $form['field_anzahl_einheiten']['#attributes']['class'][] = 'medium-6 column';
   //$form['field_anzahl_einheiten']['#weight'] = 6;
   $form['field_minimale_anzahl']['#attributes']['class'][] = 'medium-6 column';
-  $form['field_kategorie']['#attributes']['class'][] = 'medium-6 column right';
+  $form['field_kategorie']['#attributes']['class'][] = 'medium-6 column right hide';
 
-  /*$form['images'] = array(
-    '#type' => 'container',
-    '#tree' => 'true',
-    '#weight' => 2,
-    '#prefix' => '<fieldset class="medium-12 column"><legend>'.t('Bilder').'</legend>',
-    '#suffix' => '</fieldset>'
-  ); */
+  $kategorien = array();
+  foreach (bat_event_get_states('depot_kategorie') as $kategorie){
+    $kategorien[$kategorie['label']. ' [state_id:'.$kategorie['id'].']'] = $kategorie['label']; 
+  }
+
+  $form['field_fake_kategorie']['#type'] = 'select';
+  $form['field_fake_kategorie']['#selected'] = TRUE;
+  $form['field_fake_kategorie']['#required'] = TRUE;  
+  $form['field_fake_kategorie']['#title'] = t('Kategorie');  
+  $form['field_fake_kategorie']['#attributes']['class'][] = 'medium-6 column right';  
+  $form['field_fake_kategorie']['#options'] = $kategorien;
   $form['field_bild_i']['#prefix'] = '<fieldset class="medium-12 column"><legend>'.t('Bilder').'</legend><div class="medium-4 column">';
   $form['field_bild_i']['#suffix'] = '</div>';
   $form['field_bild_ii']['#prefix'] = '<div class="medium-4 column">';
@@ -76,30 +74,7 @@ function depot_ressource_edit_form($form, &$form_state, $type) {
   $form['field_bild_iii']['#prefix'] = '<div class="medium-4 column">';
   $form['field_bild_iii']['#suffix'] = '</div></fieldset>';
   $form['field_bild_iii']['und'][0]['#description'] = '';
-  /*$form['images']['image_i'] = $form['field_bild_i'];
-  $form['images']['image_ii'] = $form['field_bild_ii'];
-  $form['images']['image_iii'] = $form['field_bild_iii'];
-  unset($form['field_bild_i']);
-  unset($form['field_bild_ii']);
-  unset($form['field_bild_iii']);*/
 
-  /*$form['price'] = array(
-    '#type' => 'container',
-    '#tree' => true,
-    '#weight' => 4,
-    '#prefix' => '<fieldset class="medium-12 column"><legend>'.t('Preis').'</legend>',
-    '#suffix' => '</fieldset>'
-  ); 
-  $form['price']['price_normal'] = $form['field_kosten'];
-  $form['price']['price_discount'] = $form['field_kosten_2'];
-  $form['price']['price_deposit'] = $form['field_kaution'];
-  $form['price']['price_mwst'] = $form['field_mwst'];
-  $form['price']['price_granularity'] = $form['field_abrechnungstakt'];
-  unset($form['field_kosten']);
-  unset($form['field_kosten_2']);
-  unset($form['field_kaution']);
-  unset($form['field_abrechnungstakt']);
-  unset($form['field_mwst']); */
   $form['field_kosten']['#prefix'] = '<fieldset class="medium-12 column"><legend>'.t('Preis').'</legend><div class="medium-3 column">';
   $form['field_kosten']['#suffix'] = '</div>';
   $form['field_kosten_2']['#prefix'] = '<div class="medium-3 column">';
@@ -111,23 +86,6 @@ function depot_ressource_edit_form($form, &$form_state, $type) {
   $form['field_abrechnungstakt']['#prefix'] = '<div class="medium-2 column">';
   $form['field_abrechnungstakt']['#suffix'] = '</div></fieldset>';
 
-  /*$form['adress'] = array(
-    '#type' => 'container',
-    '#tree' => true,
-    '#weight' => 4,
-    '#prefix' => '<fieldset class="medium-12 column"><legend>'.t('Ort der Abholung').'</legend>',
-    '#suffix' => '</fieldset>'
-  );
-  $form['adress']['field_adresse_strasse'] = $form['field_adresse_strasse'];
-  $form['adress']['field_adresse_postleitzahl'] = $form['field_adresse_postleitzahl'];
-  $form['adress']['field_adresse_ort'] = $form['field_adresse_ort'];
-  $form['adress']['field_bezirk'] = $form['field_bezirk'];
-  $form['adress']['field__ffnungszeiten'] = $form['field__ffnungszeiten'];
-  unset($form['field_adresse_strasse']);
-  unset($form['field_adresse_postleitzahl']);
-  unset($form['field_adresse_ort']);
-  unset($form['field_bezirk']);
-  unset($form['field__ffnungszeiten']);*/
   $form['field_adresse_strasse']['#prefix'] = '<fieldset class="medium-12 column"><legend>'.t('Ort der Abholung').'</legend><div class="medium-4 column">';
   $form['field_adresse_strasse']['#suffix'] = '</div>';
   $form['field_adresse_postleitzahl']['#prefix'] = '<div class="medium-2 column">';

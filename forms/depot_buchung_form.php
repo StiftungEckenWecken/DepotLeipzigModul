@@ -426,7 +426,7 @@ function depot_booking_edit_form_validate(&$form, &$form_state) {
 function depot_booking_edit_form_submit(&$form, &$form_state) {
 
   $booking = entity_ui_controller('bat_booking')->entityFormSubmitBuildEntity($form, $form_state);
-  $isNewBooking = !empty($booking->label);
+  $isNewBooking = empty($booking->label);
 
   $booking->created = !empty($booking->date) ? strtotime($booking->date) : REQUEST_TIME;
   $booking->changed = time();

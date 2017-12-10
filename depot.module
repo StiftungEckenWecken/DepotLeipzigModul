@@ -358,6 +358,23 @@ function depot_buchung_detail($booking_id){
 
 }
 
+function depot_inline_entity_form_reference_form_alter(&$reference_form, &$form_state) {
+  
+  $field = field_info_field($reference_form['#parents'][0]);
+  $entity_type = $field['settings']['target_type'];
+  $info = entity_get_info($entity_type);
+  $bundles = $info['bundles'];
+  $entities = entity_load($entity_type);
+  $options = array();
+  foreach($entities as $entity){
+    $title = entity_label($entity_type, $entity);
+    $options[$title.' ('.$entity->id.')'] = $title . ' (' . $bundles[$entity->type]['label'] . ')';
+  }
+  $reference_form['entity_id']['#type'] = 'select';
+  $reference_form['entity_id']['#options'] = $options;
+
+}
+
 /**
  * Called by path reservierungen/%id/delete
  */
@@ -367,14 +384,27 @@ function depot_buchung_delete($booking_id){
   $booking = bat_booking_load($booking_id);
   $booking_proxy = get_object_vars($booking);
 
-  if (empty($booking) || (!user_has_role(ROLE_ADMINISTRATOR) && $booking_proxy->field_verleiher['und'][0]['value'] != $user->uid && $booking_proxy->field_ausleiher['und'][0]['value'] != $user->uid)){
+  if (empty($booking) || (!user_has_role(ROLE_ADMINISTRATOR) && $booking_proxy['field_verleiher']['und'][0]['value'] != $user->uid && $booking_proxy['field_ausleiher']['und'][0]['value'] != $user->uid)){
     drupal_access_denied();
+    drupal_exit();
   }
 
-  // TODO: Remove connected units
-  // TODO: Send mail
+  // Delete connected units
+  $booking_event = db_select('bat_events','e')
+   ->fields('e',array('event_id'))
+   ->condition('start_date', $booking_proxy['booking_start_date']['und'][0]['value'])
+   ->execute()
+   ->fetchObject();
+   
+   // bat_event_delete($form_state['bat_event']);
+
+  $booking_event = bat_event_load($booking_event->event_id);
+  $booking_event->delete();
+  
 
   $booking->delete();
+
+  // TODO: Send mail
   drupal_set_message(t('Die Reservierung wurde erfolgreich storniert und Ver- bzw. Entleiher informiert.'));
   drupal_goto('ressourcen');
 
