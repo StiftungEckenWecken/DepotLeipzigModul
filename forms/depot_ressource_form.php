@@ -54,11 +54,17 @@ function depot_ressource_edit_form($form, &$form_state, $type) {
   //$form['field_anzahl_einheiten']['#weight'] = 6;
   $form['field_minimale_anzahl']['#attributes']['class'][] = 'medium-6 column';
   $form['field_kategorie']['#attributes']['class'][] = 'medium-6 column right hide';
-
+  
   $kategorien = array();
+  $defaultKategorie = (isset($type->field_kategorie['und'][0]['state_id']) ? $type->field_kategorie['und'][0]['state_id'] : '');
+  
   foreach (bat_event_get_states('depot_kategorie') as $kategorie){
-    $kategorien[$kategorie['label']. ' [state_id:'.$kategorie['id'].']'] = $kategorie['label']; 
-  }
+    $autocompleteVal = $kategorie['label']. ' [state_id:'.$kategorie['id'].']';
+    $kategorien[$autocompleteVal] = $kategorie['label']; 
+    if ($kategorie['id'] == $defaultKategorie){
+      $form['field_fake_kategorie']['#default_value'] = $autocompleteVal;
+    }
+  };
 
   $form['field_fake_kategorie']['#type'] = 'select';
   $form['field_fake_kategorie']['#selected'] = TRUE;

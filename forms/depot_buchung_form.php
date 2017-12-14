@@ -77,10 +77,10 @@ function depot_booking_edit_form($form, &$form_state, $booking) {
   $avail_units = count(depot_get_available_units_by_rid($params['rid'], $begin_bat, $end_bat, true));  
 
   $ressource = get_object_vars(bat_type_load($params['rid']));
-  $user_is_organisation = in_array(ROLE_ORGANISATION_NAME ,$user->roles);
+  $user_is_organisation = in_array(ROLE_ORGANISATION_AUTH_NAME, $user->roles);
   $anbieter = user_load($ressource['revision_uid']);
   $user_is_anbieter = ($anbieter->uid === $user->uid);  
-  $anbieter->is_organisation = in_array(ROLE_ORGANISATION_NAME ,$anbieter->roles);
+  $anbieter->is_organisation = in_array(ROLE_ORGANISATION_NAME, $anbieter->roles);
   $allow_change = (user_has_role(ROLE_ADMINISTRATOR) || $edit_mode);  
 
   if ($ressource['field_abrechnungstakt']['und'][0]['value'] == 0){

@@ -1,9 +1,12 @@
 <?php
 
-use Roomify\Bat\Event\Event;
+//use Roomify\Bat\Event\Event;
 
 define('ROLE_ADMINISTRATOR', 3); // = 'Administrator'
-define('ROLE_ORGANISATION',  4); // = 'Authentifizierte Organisation'
+define('ROLE_ORGANISATION', 5); // = 'Organisation'
+define('ROLE_ORGANISATION_AUTH', 4); // = 'Authentifizierte Organisation'
+
+define('ROLE_ORGANISATION_AUTH_NAME', 'Organisation');
 define('ROLE_ORGANISATION_NAME', 'Authentifizierte Organisation');
 define('ROLE_ADMINISTRATOR_NAME', 'Administrator');
 
@@ -12,7 +15,7 @@ define('ROLE_ADMINISTRATOR_NAME', 'Administrator');
 function depot_admin_access_only() {
 
   global $user;
-  if (!in_array('administrator', $user->roles)){
+  if (!in_array(ROLE_ADMINISTRATOR_NAME, $user->roles)){
     return false;
   }
   return true;
@@ -33,7 +36,7 @@ function depot_auth_user_access_only() {
  */
 function depot_mail($key, &$message, $params) {
 
-  user_mail_tokens($variables, $data, $options);
+  //user_mail_tokens($variables, $data, $options);
 
   $message['subject'] = $params['subject'];
   $message['body'][] = $params['body'];
@@ -156,11 +159,36 @@ function depot_menu() {
     'title' => 'Check ressource availability',
     'page callback' => 'depot_ajax_check_availability',
     'description' => 'AJAX method for resources',
-      'access callback' => 'user_is_logged_in'
+    'access callback' => 'user_is_logged_in'
+  );
+
+  $items['depot/user_auth_confirm/%'] = array(
+    'page callback' => 'depot_user_auth_confirm',
+    'access callback' => 'depot_admin_access_only',
+    'page arguments' => array(2),
   );
 
   return $items;
   
+}
+
+function depot_user_auth_confirm($uid){
+
+  $user = user_load($uid);
+  $to = $user->mail;
+
+  db_query('INSERT INTO {users_roles} (uid, rid) VALUES (:uid, :rid)', array(':uid' => $uid, ':rid' => ROLE_ORGANISATION_AUTH));
+ 
+  $mail_body = 'Lieber Nutzer, Dein Antrag auf Gemeinwohlanerkennung wurde bestätigt. Du kannst nun spezielle Ressourcen zu besonderen Preisen ausleihen. Lieben Gruß, Dein Depot Team';
+  $params = array(
+    'body' => $mail_body,
+    'subject' => t('Depot Leipzig: Antrag auf Gemeinnützigkeit bestätigt'),
+  );
+
+  drupal_mail('depot','depot_organisation_authenticated',$to,'de',$params);
+  drupal_set_message(t('Dem Nutzer wurde die Rolle "'.ROLE_ORGANISATION_AUTH_NAME.'" zugeteilt und dieser hierüber informiert.'));
+  drupal_goto('admin');
+
 }
 
 function depot_verfuegbarkeiten_calendar($unit_type){
@@ -341,8 +369,14 @@ function depot_add_units($type_id, $units_name, $total_units){
  */
 function depot_build_user_edit_organisation_form(){
 
-  include_once('forms/depot_user_edit_organisation_form.php');
-  $form = drupal_get_form('depot_user_edit_organisation_form');
+  include_once('forms/depot_user_organisation_form.php');
+
+  $form[] = array();
+
+  $form[1] = drupal_get_form('depot_user_organisation_form');
+  if (user_has_role(ROLE_ORGANISATION)){
+    $form[2] = drupal_get_form('depot_user_organisation_request_form');
+  }
 
   return drupal_render($form);
 
@@ -710,4 +744,22 @@ function depot_units_bulk_action($action, $units_name, $type_id, $total_units){
       // remove
     }
 
+}
+
+// THIS IS ONLY FOR TEMPORARY USE.
+function depot_upload_file() {
+
+  global $base_url;
+
+  if ($wrapper = file_stream_wrapper_get_instance_by_uri('public://')) {
+
+    $uploaddir = $wrapper->realpath();
+    $uploadFile = $uploaddir . '/' . basename($_FILES['anhang']['name']);
+
+    if (move_uploaded_file($_FILES['anhang']['tmp_name'], $uploadFile)) {
+      return $base_url . '/sites/default/files/' . basename($_FILES['anhang']['name']);
+    } else {
+      return false;
+    }
+  }
 }
