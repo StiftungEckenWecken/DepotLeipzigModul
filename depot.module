@@ -177,16 +177,20 @@ function depot_user_auth_confirm($uid){
   $user = user_load($uid);
   $to = $user->mail;
 
+  drupal_set_message('Depot: Versuche nun, Rolle zuzuteilen. Kommt es zu einer Fehlermeldung, wurde möglicherweise der Link doppelt angeklickt.');
+
   db_query('INSERT INTO {users_roles} (uid, rid) VALUES (:uid, :rid)', array(':uid' => $uid, ':rid' => ROLE_ORGANISATION_AUTH));
  
-  $mail_body = 'Lieber Nutzer, Dein Antrag auf Gemeinwohlanerkennung wurde bestätigt. Du kannst nun spezielle Ressourcen zu besonderen Preisen ausleihen. Lieben Gruß, Dein Depot Team';
+  $mail_body = "Lieber Depot-Nutzer,\r\n\r\n";
+  $mail_body .= "Dein Antrag auf Gemeinwohlanerkennung wurde bestätigt. Du kannst nun spezielle Ressourcen zu besonderen Preisen ausleihen.\r\n";
+  $mail_body .= "Lieben Gruß, Dein Depot Team";
   $params = array(
     'body' => $mail_body,
     'subject' => t('Depot Leipzig: Antrag auf Gemeinnützigkeit bestätigt'),
   );
 
   drupal_mail('depot','depot_organisation_authenticated',$to,'de',$params);
-  drupal_set_message(t('Dem Nutzer wurde die Rolle "'.ROLE_ORGANISATION_AUTH_NAME.'" zugeteilt und dieser hierüber informiert.'));
+  drupal_set_message(t('Dem Nutzer wurde erfolgreich die Rolle "'.ROLE_ORGANISATION_AUTH_NAME.'" zugeteilt und dieser hierüber informiert.'));
   drupal_goto('admin');
 
 }
@@ -374,7 +378,7 @@ function depot_build_user_edit_organisation_form(){
   $form[] = array();
 
   $form[1] = drupal_get_form('depot_user_organisation_form');
-  if (user_has_role(ROLE_ORGANISATION)){
+  if (user_has_role(ROLE_ORGANISATION) && !user_has_role(ROLE_ORGANISATION_AUTH)){
     $form[2] = drupal_get_form('depot_user_organisation_request_form');
   }
 
@@ -450,19 +454,50 @@ function depot_buchung_delete($booking_id){
 function depot_buchung_change_status($booking_id){
   
   global $user;
+  global $base_url;
+
   $booking = bat_booking_load($booking_id);
 
   if (!user_has_role(ROLE_ADMINISTRATOR) && $booking->field_verleiher['und'][0]['value'] != $user->uid){
     drupal_goto('mein-depot');
   }
-  
+
+  // TODO: Is already accepted? If so, extend view
+
   if (!empty($_POST)){
     
     $booking->changed = time();
     $booking->field_genehmigt['und'][0]['value'] = ($booking->field_genehmigt['und'][0]['value'] == 0) ? 1 : 0;
     $booking->save();
 
-    // Send mail to ausleiher...
+    $ressource = get_object_vars(bat_type_load($booking->field_ressource_id['und'][0]['value']));
+    $created = (new DateTime())->setTimestamp($booking->created);
+
+    $mail_body = "Lieber Nutzer des Depot Leipzig,\r\n\r\n";
+    $mail_body .= "Deine Leihanfrage vom ".$created->format('d.m.Y')." wurde vom Anbieter genehmigt und kann weiterhin unter ".$base_url."/reservierungen".$booking->booking_id."/edit abgerufen werden.\r\n\r\n";
+   
+    if (isset($ressource['field_verleihvertrag_']['und'][0]['value']) && $ressource['field_verleihvertrag_']['und'][0]['value']){
+      $mail_body .= "Zudem wurde ein Leihvertrag erstellt welcher unter ".$base_url."/TODO abrufbar ist.\r\n";
+    }
+
+    $mail_body .= "Bei weiteren Fragen kontaktiere bitte direkt den Anbieter. Sollte beim Buchungsprozess etwas nicht wie gewüncht funktioniert haben, teile uns dies bitte unter ".$base_url."/contact mit.\r\n\r\n";
+    $mail_body .= "Vielen Dank und bis bald, Dein Team vom Depot Leipzig";
+    
+    $params = array(
+      'body' => $mail_body,
+      'subject' => t('Depot Leipzig: Bestätigung Deiner Reservierungsanfrage'),
+      'headers' => array(
+        'Cc' => $booking->field_verleiher['und'][0]['value']
+      )
+    );
+
+    echo $mail_body; exit();
+  
+    drupal_mail('depot','depot_buchung_form', $booking->field_ausleiher['und'][0]['value'],'de', $params);
+    
+
+
+    // Send Mail to ausleiher
 
     drupal_set_message(t('Die Reservierung wurde genehmigt und der Interessent benachrichtigt!'));
     drupal_goto('mein-depot/reservierungen');

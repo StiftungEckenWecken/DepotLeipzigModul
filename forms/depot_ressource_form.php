@@ -48,7 +48,7 @@ function depot_ressource_edit_form($form, &$form_state, $type) {
     '#weight' => 99,
   );
 
-  $form['#token'] = FALSE; // Temp; To avoid errors with cached form tokens
+  //$form['#token'] = FALSE; // Temp; To avoid errors with cached form tokens
 
   $form['field_anzahl_einheiten']['#attributes']['class'][] = 'medium-6 column';
   //$form['field_anzahl_einheiten']['#weight'] = 6;
@@ -336,11 +336,14 @@ function depot_ressource_edit_form_validate(&$form, &$form_state) {
  * Form API submit callback for the type form.
  */
 function depot_ressource_edit_form_submit(&$form, &$form_state) {
-//print_r($form); exit();
-  $newEntity = (empty($type->type_id));
+   
+  global $user;
+  global $base_url;
 
   $type = entity_ui_controller('bat_type')->entityFormSubmitBuildEntity($form, $form_state);
   $type->created = !empty($type->date) ? strtotime($type->date) : REQUEST_TIME;
+
+  $newEntity = (empty($type->type_id));
 
   if (!$newEntity) {
     $type->changed = time();
@@ -363,7 +366,7 @@ function depot_ressource_edit_form_submit(&$form, &$form_state) {
     }
   }
 
-  if (isset($type->author_name)) {
+  if ($newEntity && isset($type->author_name)) {
     if ($account = user_load_by_name($type->author_name)) {
       $type->uid = $account->uid;
     }
@@ -377,7 +380,38 @@ function depot_ressource_edit_form_submit(&$form, &$form_state) {
   if ($newEntity){
     depot_units_bulk_action('add', $type->name, $type->type_id, $form_state['values']['field_anzahl_einheiten']['und'][0]['value']);
     drupal_set_message(t('Ressource "@name" wurde gespeichert und wartet nun auf Aktivierung. Sie können Sperrzeiten jederzeit unter "Verfügbarkeiten ändern" festlegen.', array('@name' => $type->name)));    
+    
+    $mail_body = "Lieber Administrator,\r\n\r\n";
+    $mail_body .= "Der Depot-Nutzer ".$user->name." hat die Ressource ".$type->name." eingestellt\r\n";
+    $mail_body .= "Diese ist unter ".$base_url."/ressourcen/".$type->type_id." zu finden.\r\n";
+    $mail_body .= "Um die Ressource freizuschalten, gehen Sie bitte auf 'Ressource bearbeiten' und setzen Sie ein Häckchen bei 'Genehmigt'. Der Nutzer wird daraufhin verständigt.";
+    
+    $params = array(
+      'body' => $mail_body,
+      'subject' => t('Depot Leipzig: Ressource wartet auf Freischaltung'),
+    );
+  
+    drupal_mail('depot','depot_ressource_form',variable_get('site_mail', ''),'de',$params);
+    
   } else {
+    if ($user->uid == 1 && $form_state['values']['field_aktiviert']['und'][0]['value']){
+      // Was not activated (TODO), now it is!
+      $user = user_load($type->uid);
+
+      $mail_body = "Lieber Depot-Nutzer,\r\n\r\n";
+      $mail_body .= "Deine Ressource ".$type->name." wurde nun durch unser Team freigeschaltet.\r\n\r\n";
+      $mail_body .= "Vielen Dank für das Teilen Deines Angebotes. Wir hoffen, Du wirst damit Freude haben! Sollten weitere Fragen oder Anregungen bestehen, zögere nicht, diese uns über das Kontaktformular mitzuteilen!\r\n";
+      $mail_body .= "Dein Team vom Depot Leipzig";
+
+      $params = array(
+        'body' => $mail_body,
+        'subject' => t('Depot Leipzig: Ressource wartet auf Freischaltung'),
+      );
+    
+      drupal_mail('depot','depot_ressource_form',$user->mail,'de',$params);  
+      drupal_set_message('Nutzer wurde über Genehmigung benachrichtigt.');
+
+    }
     depot_units_bulk_action('edit', $type->name, $type->type_id, $form_state['values']['field_anzahl_einheiten']['und'][0]['value']);    
     drupal_set_message(t('Ressource "@name" wurde aktualisiert.', array('@name' => $type->name)));
   }

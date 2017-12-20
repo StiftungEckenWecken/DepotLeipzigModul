@@ -4,12 +4,6 @@
 
 /* Act as an organization, not person */
 function depot_user_organisation_form($form, &$form_state) {
-  
-/*
-TODO: Image upload prüfen / fertigstellen
-      Felderwerte in $user hinterlegen
-      OPT: EMAIL ALS HTML
-*/
 
   global $user;
   $user = user_load($user->uid);
@@ -200,8 +194,8 @@ function depot_user_organisation_request_form_validate(&$form, &$form_state) {
     drupal_set_message('Hochladen nicht vergessen','alert');
    }*/ if (isset($_FILES['anhang']['name']) && !empty($_FILES['anhang']['name'])){
     if ($_FILES['anhang']['size'] > 3145728){
-    form_set_error('Die ausgewählte Datei ist zu groß');
-    drupal_set_message('Die ausgewählte Datei ist zu groß','alert'); 
+      form_set_error('Die ausgewählte Datei ist zu groß');
+      drupal_set_message('Die ausgewählte Datei ist zu groß','alert'); 
     }
   }
 }
@@ -218,7 +212,7 @@ function depot_user_organisation_request_form_submit(&$form, &$form_state) {
   
   if (isset($_FILES['anhang']['name']) && !empty($_FILES['anhang']['name'])){
     if (!$anhang_path = depot_upload_file($_FILES['anhang'])){
-      drupal_set_message('Es gab Probleme beim Upload','alert'); 
+      drupal_set_message('Es gab leider Probleme beim Upload. Bitte probieren Sie es erneut oder kontaktieren Sie das Depot.','alert'); 
       return false;      
     }
   }
@@ -236,27 +230,24 @@ function depot_user_organisation_request_form_submit(&$form, &$form_state) {
     exit();
   }*/
 
-  $mail_body = t('Lieber Administrator,');
-  $mail_body .= t('Ein Nutzer hat um Anerkennung auf Gemeinnützigkeit gebeten.');
-  $mail_body .= 'Das Profil ist unter "'.$base_url.'/user/'.$user->uid.'/edit" zu finden.';
-  $mail_body .= 'Als Grund wurde folgender genannt: '.$form_state['values']['begruendung'].'';
+  $mail_body = "Lieber Administrator,\r\n";
+  $mail_body .= "Ein Nutzer hat um Anerkennung auf Gemeinnützigkeit gebeten.\r\n";
+  $mail_body .= "Das Profil ist unter ".$base_url."/user/".$user->uid."/edit zu finden.\r\n";
+  $mail_body .= "Als Bewilligungsgrund wurde folgender genannt: '".$form_state['values']['begruendung']."'\r\n";
 
   if (!empty($anhang_path)){
-    $mail_body .= 'Es wurde zudem ein Anhang unter "'. $anhang_path .'" hinterlegt.';
+    $mail_body .= "Es wurde zudem ein Anhang unter ". $anhang_path ." hinterlegt.\r\n";
   }
 
-  $mail_body .= 'Um dem Antrag zu zustimmen, gehen Sie bitte in Ihrem Browser auf "'. $base_url .'/depot/user_auth_confirm/'.$user->uid.'"';
+  $mail_body .= "Um dem Antrag zu zustimmen, gehen Sie bitte in Ihrem Browser auf ". $base_url ."/depot/user_auth_confirm/".$user->uid;
 
-  $cc = user_load(1)->mail;
+  //$cc = user_load(1)->mail;
   $params = array(
     'body' => $mail_body,
     'subject' => t('Depot Leipzig: Antrag auf Gemeinnützigkeit'),
-    /*'headers' => array(
-      'Cc' => 'no-reply@depot-leipzig.de',
-    ),*/
   );
 
-  drupal_mail('depot','depot_apply_organisation_form',$cc,'de',$params);
+  drupal_mail('depot','depot_apply_organisation_form',variable_get('site_mail', ''),'de',$params);
   
   // https://api.drupal.org/api/drupal/includes!mail.inc/function/drupal_mail/7.x
   drupal_set_message(t('Vielen Dank, Ihr Antrag wird umgehend von unseren Administratoren geprüft.'));

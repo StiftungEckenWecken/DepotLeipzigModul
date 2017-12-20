@@ -93,7 +93,7 @@ function depot_booking_edit_form($form, &$form_state, $booking) {
   }
 
   if (!$edit_mode){
-
+    // TODO: Dates in future?
     if (empty($avail_units)){
       drupal_set_message(t('Keine Einheiten in diesem Zeitraum verfügbar'),'error');
       depot_form_goto('ressourcen/'.$params['rid']);
@@ -184,7 +184,7 @@ function depot_booking_edit_form($form, &$form_state, $booking) {
      <p><strong>'. t('Netto') .'</strong>: '. $preis['preis_plain'] .'€</p>
      '. ($preis['preis_tax'] > 0 ? '<p><strong>'.t('MwSt').':</strong> '. $preis['preis_tax'] .'€</p>' : '') .'
      '. ($preis['preis_kaution'] > 0 ? '<p><strong>'.t('Kaution').':</strong> '.$preis['preis_kaution'].'€</p>' : '') .'      
-     <hr /><p><strong>'. t('Brutto') .'</strong>: '. $preis['preis_total'] .'€</p>
+     <hr /><p><strong>'. t('Gesamt') .'</strong>: '. $preis['preis_total'] .'€</p>
     </div>';
   
   $status_col = null;
@@ -204,7 +204,7 @@ function depot_booking_edit_form($form, &$form_state, $booking) {
    '#markup' => '<div id="buchung-header" class="panel callout row"><div class="medium-12 column"><h5 class="left">'.t('Ihre Reservierung').'</h5>'.$status_col.'<hr /></div>'. $res_col . $time_col . $price_col . '</div>',
    '#weight' => -98
   );
-
+  // HERE
   $deleteButton = array(
     '#markup' => '<a class="secondary button" href="/reservierungen/'.$booking->booking_id.'/delete">'.t('Buchung unwiderruflich stornieren').'</a>',
     '#weight' => 45,
@@ -425,13 +425,23 @@ function depot_booking_edit_form_validate(&$form, &$form_state) {
  */
 function depot_booking_edit_form_submit(&$form, &$form_state) {
 
+  global $user;
+  global $base_url;
+
+  $buchung_header = $form['buchung_header']['#markup'];
+  
   $booking = entity_ui_controller('bat_booking')->entityFormSubmitBuildEntity($form, $form_state);
   $isNewBooking = empty($booking->label);
+
+  __depot_booking_edit_form_set_params($params);  
+
+  $ressource = get_object_vars(bat_type_load($params['rid']));
+  $anbieter = user_load($ressource['revision_uid']);
 
   $booking->created = !empty($booking->date) ? strtotime($booking->date) : REQUEST_TIME;
   $booking->changed = time();
 
-  if (isset($booking->author_name)) {
+  if (isset($booking->author_name) && $isNewBooking) {
     if ($account = user_load_by_name($booking->author_name)) {
       $booking->uid = $account->uid;
     }
@@ -440,9 +450,10 @@ function depot_booking_edit_form_submit(&$form, &$form_state) {
     }
   }
 
+  $booking->save();
+
   if ($isNewBooking){
     $params = array();
-    __depot_booking_edit_form_set_params($params);
     /*
      Setze Anzahl x units auf ausgebucht
      TODO:
@@ -451,12 +462,41 @@ function depot_booking_edit_form_submit(&$form, &$form_state) {
      Mail an Interessent
     */
     depot_events_bulk_action($params['rid'], $params['einheiten'], $form['booking_start_date']['und'][0]['#default_value']['value'], $form['booking_end_date']['und'][0]['#default_value']['value']);
+
+    // Generiere Verleihvertrag
+
+    $mail_body = "Lieber Anbieter beim Depot Leipzig,\r\n\r\n";
+    $mail_body .= "Der Nutzer ".$user->name." hat folgende Reservierungsanfrage über das Depot gestellt:\r\n\r\n";
+    $mail_body .= $buchung_header."\r\n\r\n";
+    $mail_body .= "Genannter Grund für die Buchung: '".$form['field_geplante_nutzung']['und'][0]['value']['#value']."'.\r\n\r\n";
+    
+    if (!empty($form['field_nachricht_an_den_anbieter']['und'][0]['value']['#value'])){
+      $mail_body .= "Zudem hat der Interessent folgende Nachricht hinterlassen: '".$form['field_nachricht_an_den_anbieter']['und'][0]['value']['#value']."'.\r\n\r\n";
+    }
+
+    $mail_body .= "Diese und alle weiteren Details lassen sich über folgenden Link einsehen und ggf. bearbeiten: ". $base_url ."/reservierungen/".$booking->booking_id."/edit\r\n";
+    $mail_body .= "Bist Du mit der Reservierung einverstanden vergiss bitte nicht, diese auch zu genehmigen, damit der Nutzer hierüber informiert";
+    
+    if (isset($ressource['field_verleihvertrag_']['und'][0]['value']) && $ressource['field_verleihvertrag_']['und'][0]['value']){
+      $mail_body .= " und, wie gewünscht, ein Verleihvertrag erstellt";
+    }
+
+    $mail_body .= " werden kann. Den Link zum aktivieren findest Du unter 'Mein Depot' oder direkt unter ".$base_url."/reservierungen/".$booking->booking_id."/change_status\r\n\r\n";
+    $mail_body .= "Vielen Dank für Dein Interesse, das Team vom Depot Leipzig";
+    
+    $mail_body = str_replace('Ihre Reservierung','',$mail_body);
+
+    $params = array(
+      'body' => strip_tags($mail_body,'<p><h4><br><br><div>'),
+      'subject' => t('Depot Leipzig: Reservierungsanfrage'),
+    );
+  
+    drupal_mail('depot','depot_buchung_form', $anbieter->mail,'de', $params);
+    
     drupal_set_message(t('Ihre Reservierung wurde gespeichert und der Ressourceninhaber informiert. Dieser wird sich mit Ihnen in Verbindung setzen.'));    
   } else {
     drupal_set_message(t('Die Reservierung wurde erfolgreich bearbeitet.'));
   }
-
-  $booking->save();
 
   $form_state['redirect'] = 'mein-depot/reservierungen';
   
