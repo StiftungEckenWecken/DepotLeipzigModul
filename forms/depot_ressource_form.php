@@ -21,12 +21,14 @@ function depot_ressource_edit_form($form, &$form_state, $type) {
     '#weight' => '-99'
   );
 
-  $form['#attributes']['class'][] = 'bat-management-form bat-type-edit-form';
+  //$form['#attributes']['class'][] = 'bat-management-form bat-type-edit-form';
 
   $form['type'] = array(
     '#type' => 'value',
     '#value' => $type->type,
   );
+
+  $form_state['was_active_before'] = (bool) $type->field_aktiviert['und'][0]['value'];
 
   // Add the default field elements.
   $form['name'] = array(
@@ -94,10 +96,13 @@ function depot_ressource_edit_form($form, &$form_state, $type) {
 
   $form['field_adresse_strasse']['#prefix'] = '<fieldset class="medium-12 column"><legend>'.t('Ort der Abholung').'</legend><div class="medium-4 column">';
   $form['field_adresse_strasse']['#suffix'] = '</div>';
+  $form['field_adresse_strasse']['#default_value'] = $user->field_user_adresse_strasse['und'][0]['safe_value'];
   $form['field_adresse_postleitzahl']['#prefix'] = '<div class="medium-2 column">';
   $form['field_adresse_postleitzahl']['#suffix'] = '</div>';
+  $form['field_adresse_postleitzahl']['#default_value'] = $user->field_user_adresse_postleitzahl['und'][0]['safe_value'];
   $form['field_adresse_ort']['#prefix'] = '<div class="medium-3 column">';
   $form['field_adresse_ort']['#suffix'] = '</div>';
+  $form['field_adresse_ort']['#default_value'] = $user->field_user_adresse_wohnort['und'][0]['safe_value'];
   $form['field_bezirk']['#prefix'] = '<div class="medium-3 column">';
   $form['field_bezirk']['#suffix'] = '</div>';
   $form['field__ffnungszeiten']['#suffix'] = '</fieldset>';
@@ -134,8 +139,9 @@ function depot_ressource_edit_form($form, &$form_state, $type) {
   unset($form['field_verleihvertrag_']);
   unset($form['field_verleihvertrag_text']);*/
 
-  if (!user_has_role(ROLE_ADMINISTRATOR))
-      $form['field_aktiviert']['#access'] = FALSE;
+  if (!user_has_role(ROLE_ADMINISTRATOR)){
+    $form['field_aktiviert']['#access'] = FALSE;
+  }
 
  # if ($formfield_verleihvertrag_)
 
@@ -145,6 +151,7 @@ function depot_ressource_edit_form($form, &$form_state, $type) {
   if (empty($type->field_links_ii))
       $form['field_links_iii']['#attributes']['class'][] = 'hide';
   
+  if (false){
 
   // Type author information for administrators.
   $form['author'] = array(
@@ -277,6 +284,7 @@ function depot_ressource_edit_form($form, &$form_state, $type) {
     '#title' => t('Published'),
     '#default_value' => $type->status,
   );
+  } // Disabled revision & status feature for easier maintanance 
 
   $form['actions'] = array(
     '#type' => 'actions',
@@ -291,7 +299,7 @@ function depot_ressource_edit_form($form, &$form_state, $type) {
   $form['actions']['submit'] = array(
     '#type' => 'submit',
     '#value' => t('Ressource speichern'),
-    '#submit' => $submit + array('depot_ressource_edit_form_submit'),
+    '#submit' => $submit + array('depot_ressource_edit_form_submit_wrapper'),
   );
   $form['actions']['submit']['#attributes']['class'] = array('button');
   $form['actions']['submit']['#attributes']['class'] = array('button expand margin-top-ten');
@@ -316,7 +324,7 @@ function depot_ressource_edit_form($form, &$form_state, $type) {
     $form['actions']['submit']['#attributes']['class'] = array('button expand margin-top-ten');
   }
 
-  $form['#validate'][] = 'depot_ressource_edit_form_validate';
+  //$form['#validate'][] = 'depot_ressource_edit_form_validate';
 
   return $form;
 }
@@ -343,12 +351,15 @@ function depot_ressource_edit_form_submit(&$form, &$form_state) {
   $type = entity_ui_controller('bat_type')->entityFormSubmitBuildEntity($form, $form_state);
   $type->created = !empty($type->date) ? strtotime($type->date) : REQUEST_TIME;
 
+//echo $form_state['was_active_before']; exit();
   $newEntity = (empty($type->type_id));
 
   if (!$newEntity) {
     $type->changed = time();
   }
-
+  
+  if (false){
+    exit();
   if (module_exists('revisioning')) {
     if (isset($type->revision_operation)) {
       $type->revision = ($type->revision_operation > REVISIONING_NO_REVISION);
@@ -365,15 +376,22 @@ function depot_ressource_edit_form_submit(&$form, &$form_state) {
       $type->log = $form_state['values']['log'];
     }
   }
+  }
 
   if ($newEntity && isset($type->author_name)) {
     if ($account = user_load_by_name($type->author_name)) {
       $type->uid = $account->uid;
+      watchdog('Changed uid in first line to '.$type->uid.' for Ressource '.$type->type_id, 'alert');
     }
     else {
       $type->uid = 0;
     }
+    watchdog('Changed uid to '.$type->uid.' for Ressource '.$type->type_id, 'alert');
   }
+
+  humanize_price($type->field_kosten['und'][0]['value']);
+  humanize_price($type->field_kosten_2['und'][0]['value']);
+  humanize_price($type->field_kaution['und'][0]['value']);
 
   $type->save();
 
@@ -394,18 +412,18 @@ function depot_ressource_edit_form_submit(&$form, &$form_state) {
     drupal_mail('depot','depot_ressource_form',variable_get('site_mail', ''),'de',$params);
     
   } else {
-    if ($user->uid == 1 && $form_state['values']['field_aktiviert']['und'][0]['value']){
-      // Was not activated (TODO), now it is!
+    if (!$form_state['was_active_before'] && $user->uid == 1 && $form_state['values']['field_aktiviert']['und'][0]['value']){
+      // Was not activated, now it is!
       $user = user_load($type->uid);
 
       $mail_body = "Lieber Depot-Nutzer,\r\n\r\n";
-      $mail_body .= "Deine Ressource ".$type->name." wurde nun durch unser Team freigeschaltet.\r\n\r\n";
-      $mail_body .= "Vielen Dank für das Teilen Deines Angebotes. Wir hoffen, Du wirst damit Freude haben! Sollten weitere Fragen oder Anregungen bestehen, zögere nicht, diese uns über das Kontaktformular mitzuteilen!\r\n";
+      $mail_body .= "Deine Ressource *".$type->name."* wurde nun durch unser Team freigeschaltet.\r\n\r\n";
+      $mail_body .= "Vielen Dank für das Teilen Deines Angebotes. Wir hoffen, Du wirst damit Freude haben! Sollten weitere Fragen oder Anregungen bestehen, zögere nicht, diese uns über das Kontaktformular mitzuteilen!\r\n\r\n";
       $mail_body .= "Dein Team vom Depot Leipzig";
 
       $params = array(
         'body' => $mail_body,
-        'subject' => t('Depot Leipzig: Ressource wartet auf Freischaltung'),
+        'subject' => t('Depot Leipzig: Ressource '.$type->name.' wurde freigeschaltet'),
       );
     
       drupal_mail('depot','depot_ressource_form',$user->mail,'de',$params);  
@@ -417,7 +435,7 @@ function depot_ressource_edit_form_submit(&$form, &$form_state) {
   }
 
   $form_state['redirect'] = 'ressourcen/'.$type->type_id;
-}
+}  
 
 /**
  * Form API submit callback for the delete button.

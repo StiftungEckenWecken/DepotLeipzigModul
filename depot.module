@@ -70,10 +70,11 @@ function depot_user_logout(){
 
 function depot_verfuegbarkeiten_ajax_callback($page_callback_result) {
   // Only render content
+  global $base_url;
   $content = drupal_render($page_callback_result);
 
   // Add CSS and JS files, add some markup
-  $html = '<html><head><title></title>' . drupal_get_css() . drupal_get_js() . '</head><body class="jquery-ajax-load">' . $content . '  <script type="text/javascript" src="http://drupal.localhost/sites/all/modules/bat/modules/bat_fullcalendar/js/bat_fullcalendar_timeline.js"></script></body></html>';
+  $html = '<html><head><title></title>' . drupal_get_css() . drupal_get_js() . '</head><body class="jquery-ajax-load">' . $content . '  <script type="text/javascript" src="'. $base_url .'/sites/all/themes/depot_theme/js/fullcalendar_timeline.js"></script><style type="text/css">div.ctools-modal-content .form-item label {width:100%;}.form-item {margin:0;}.hide{display:none;}</style></body></html>';
   print $html;
 
   drupal_page_footer();
@@ -129,6 +130,13 @@ function depot_menu() {
     'title' => t('Reservierungsstatus ändern'),
     'page callback' => 'depot_buchung_change_status',
     'description' => t('Reservierungsstatus ändern'),
+    'access callback' => 'user_is_logged_in',
+    'page arguments' => array(1),
+  );
+
+  $items['reservierungen/%/verleihvertrag'] = array(
+    'title' => t('Verleihvertrag'),
+    'page callback' => 'depot_buchung_verleihvertrag',
     'access callback' => 'user_is_logged_in',
     'page arguments' => array(1),
   );
@@ -324,13 +332,13 @@ function depot_get_units_count($rid){
 
 }
 
-function depot_add_units($type_id, $units_name, $total_units){
+function depot_add_units($type_id, $units_name, $total_units, $id_name_starter = null){
 
   global $user;
 
   for ($i = 1; $i <= $total_units; $i++) {
     $unit = bat_unit_create(array('type' => 'default'));
-    $unit->name = $units_name . ' ' . $i;
+    $unit->name = $units_name . ' ' . ($id_name_starter ? $id_name_starter + $i : $i);
     $unit->created = REQUEST_TIME;
       
     $unit->type_id = $type_id;
@@ -340,6 +348,7 @@ function depot_add_units($type_id, $units_name, $total_units){
   }
 }
 
+//dump:
 //function depot_check_availability($rid, $start, $end, $units = 1){
   function depot_check_availability(){
 
@@ -419,32 +428,52 @@ function depot_inline_entity_form_reference_form_alter(&$reference_form, &$form_
 function depot_buchung_delete($booking_id){
   
   global $user;
+  global $base_url;
+
   $booking = bat_booking_load($booking_id);
   $booking_proxy = get_object_vars($booking);
+  $anbieter = $booking_proxy['field_verleiher']['und'][0]['value'];
+  $ausleiher = $booking_proxy['field_ausleiher']['und'][0]['value'];
 
-  if (empty($booking) || (!user_has_role(ROLE_ADMINISTRATOR) && $booking_proxy['field_verleiher']['und'][0]['value'] != $user->uid && $booking_proxy['field_ausleiher']['und'][0]['value'] != $user->uid)){
+  if (empty($booking) || (!user_has_role(ROLE_ADMINISTRATOR) && $anbieter != $user->uid && $ausleiher != $user->uid)){
     drupal_access_denied();
     drupal_exit();
   }
 
-  // Delete connected units
-  $booking_event = db_select('bat_events','e')
-   ->fields('e',array('event_id'))
-   ->condition('start_date', $booking_proxy['booking_start_date']['und'][0]['value'])
+  $created = (new DateTime())->setTimestamp($booking_proxy['created']);
+
+  // Get & Delete connected events and its references
+  $booking_events = db_select('field_data_field_booking_id','e')
+   ->fields('e', array('entity_id'))
+   ->condition('field_booking_id_value', $booking_id)
    ->execute()
-   ->fetchObject();
-   
+   ->fetchAll();
+
    // bat_event_delete($form_state['bat_event']);
 
-  $booking_event = bat_event_load($booking_event->event_id);
-  $booking_event->delete();
+   foreach ($booking_events as $event){
+     $booking_event = bat_event_load($event->entity_id);
+     $booking_event->delete();
+   }
   
+   $booking->delete();
 
-  $booking->delete();
+   $mail_body = "Lieber Nutzer des Depot Leipzig,\r\n\r\n";
+   $mail_body .= "hiermit bestätigen wir, dass Deine Leihanfrage vom ".$created->format('d.m.Y')." (#".$booking->booking_id.") storniert und alle damit verbundenen Reservierungen aus unserem System entfernt wurden.\r\n\r\n";
+   $mail_body .= "Vielen Dank und bis bald, Dein Team vom Depot Leipzig";
 
-  // TODO: Send mail
-  drupal_set_message(t('Die Reservierung wurde erfolgreich storniert und Ver- bzw. Entleiher informiert.'));
-  drupal_goto('ressourcen');
+   $params = array(
+     'body' => $mail_body,
+     'subject' => t('Depot Leipzig: Stornierung Deiner Leihanfrage'),
+     'headers' => array(
+       'Cc' => user_load($anbieter)->mail
+     )
+   );
+  
+   drupal_mail('depot','depot_buchung_delete_form', user_load($ausleiher)->mail,'de', $params);
+
+   drupal_set_message(t('Die Reservierung wurde erfolgreich storniert und Ver- bzw. Entleiher informiert.'));
+   drupal_goto('ressourcen');
 
 }
 
@@ -470,36 +499,41 @@ function depot_buchung_change_status($booking_id){
     $booking->field_genehmigt['und'][0]['value'] = ($booking->field_genehmigt['und'][0]['value'] == 0) ? 1 : 0;
     $booking->save();
 
+    $anbieter = user_load($booking->field_verleiher['und'][0]['value']);
+
     $ressource = get_object_vars(bat_type_load($booking->field_ressource_id['und'][0]['value']));
     $created = (new DateTime())->setTimestamp($booking->created);
 
     $mail_body = "Lieber Nutzer des Depot Leipzig,\r\n\r\n";
-    $mail_body .= "Deine Leihanfrage vom ".$created->format('d.m.Y')." wurde vom Anbieter genehmigt und kann weiterhin unter ".$base_url."/reservierungen".$booking->booking_id."/edit abgerufen werden.\r\n\r\n";
+    $mail_body .= "Deine Leihanfrage vom ".$created->format('d.m.Y')." wurde vom Anbieter bestätigt. Bitte prüfe nocheinmal die Reservierungs-Daten unter ".$base_url."/reservierungen/".$booking->booking_id."/edit, denn es kann sein, dass der Anbieter Änderungen ggü Deinen Wünschen vorgenommen hat.\r\n\r\n";
    
     if (isset($ressource['field_verleihvertrag_']['und'][0]['value']) && $ressource['field_verleihvertrag_']['und'][0]['value']){
-      $mail_body .= "Zudem wurde ein Leihvertrag erstellt welcher unter ".$base_url."/TODO abrufbar ist.\r\n";
+      $mail_body .= "Zudem wurde ein Leihvertrag erstellt welcher unter ".$base_url."/reservierungen/".$booking->booking_id."/verleihvertrag abrufbar ist. Bei der Übergabe der Ressource wird der Anbieter Dich ggf. bitten, den dann ausgedruckten(!) Verleihvertrag zu unterschreiben.\r\n\r\n";
     }
+
+    if (isset($ressource['field_text_buchungsbes_tigung']['und'][0]['value'])){
+      $mail_body .= "Der Anbieter hat zudem folgenden Hinweis vermerkt: ".$ressource['field_text_buchungsbes_tigung']['und'][0]['value']."\r\n\r\n";
+    }
+
+    $mail_body .= "Bitte stelle unbedingt sicher, dass Du am Abhol-/Bereitstellungsort der Ressource pünktlich eintriffst, denn dem Anbieter der Ressource wird das Teilen nur Spaß machen, wenn er nicht unnötig auf Nutzer seiner Ressource warten muss. Sollte Dir etwas dazwischen kommen und Du kannst deshalb nicht pünktlich erscheinen, informiere den Ansprechpartner am Abhol-/Bereitstellungsort bitte so früh wie möglich über die angegebene Telefonnummer (". $anbieter->field_telefonnummer['und'][0]['value'] .") bzw. via Mail (". $anbieter->mail .").\r\n\r\n";
 
     $mail_body .= "Bei weiteren Fragen kontaktiere bitte direkt den Anbieter. Sollte beim Buchungsprozess etwas nicht wie gewüncht funktioniert haben, teile uns dies bitte unter ".$base_url."/contact mit.\r\n\r\n";
     $mail_body .= "Vielen Dank und bis bald, Dein Team vom Depot Leipzig";
-    
+
     $params = array(
       'body' => $mail_body,
       'subject' => t('Depot Leipzig: Bestätigung Deiner Reservierungsanfrage'),
       'headers' => array(
-        'Cc' => $booking->field_verleiher['und'][0]['value']
+        'Cc' => $anbieter->mail
       )
     );
-
-    echo $mail_body; exit();
   
-    drupal_mail('depot','depot_buchung_form', $booking->field_ausleiher['und'][0]['value'],'de', $params);
-    
-
-
-    // Send Mail to ausleiher
+    drupal_mail('depot','depot_buchung_form', user_load($booking->field_ausleiher['und'][0]['value'])->mail,'de', $params);
 
     drupal_set_message(t('Die Reservierung wurde genehmigt und der Interessent benachrichtigt!'));
+    if (isset($ressource['field_verleihvertrag_']['und'][0]['value']) && $ressource['field_verleihvertrag_']['und'][0]['value']){
+      drupal_set_message('Zudem wurde ein Leihvertrag erstellt welcher der Reservierung beiliegt.');
+    }
     drupal_goto('mein-depot/reservierungen');
 
   } else {
@@ -511,11 +545,33 @@ function depot_buchung_change_status($booking_id){
 
 }
 
+function depot_buchung_verleihvertrag($booking_id){
+  
+  global $user;
+
+  $booking = bat_booking_load($booking_id);
+  $anbieter = user_load($booking->field_verleiher['und'][0]['value']);
+  $ausleiher = user_load($booking->field_ausleiher['und'][0]['value']);
+  $ressource = get_object_vars(bat_type_load($booking->field_ressource_id['und'][0]['value']));
+  
+  if (isset($ressource['field_verleihvertrag_']['und'][0]['value'])){
+    $booking_header = depot_buchung_form($booking_id, true)['buchung_header']['#markup'];
+    str_replace('Ihre Reservierung','',$booking_header);
+    include_once(path_to_theme().'/templates/verleihvertrag.tpl.php');
+    return pdf_using_mpdf_api($html);
+  } else if ($anbieter->uid != $user->uid && $ausleiher->uid != $user->uid) {
+    drupal_access_denied();
+  } else {
+    drupal_set_message(t('Der Anbieter hat Verleihverträge für diese Ressource deaktiviert'),'warning');
+    drupal_access_denied();
+  }
+}
+
 /**
  * Called by path buchungen/neu
  * Presents a booking form, based on BAT Booking module
  */
-function depot_buchung_form($booking_id = null){
+function depot_buchung_form($booking_id = null, $force_header_only = false){
 
   global $user;
 
@@ -526,6 +582,10 @@ function depot_buchung_form($booking_id = null){
     $booking->created = REQUEST_TIME;
     $booking->author_name = $user->name;
     $booking->status = 1;
+  }
+
+  if ($force_header_only){
+    $booking->force_header_only = 1;
   }
 
   include_once('forms/depot_buchung_form.php');
@@ -546,16 +606,28 @@ function depot_ressource_form($type_id = null){
     $type->created = REQUEST_TIME;
     $type->author_name = $user->name;
     $type->status = 1;
-
   } else {
     $type = bat_type_load($type_id);
   }
 
-  include_once('forms/depot_ressource_form.php');
-
-  return drupal_get_form('depot_ressource_edit_form', $type);
+  return drupal_get_form('depot_ressource_edit_form_wrapper', $type);
 
 }
+
+function depot_ressource_edit_form_wrapper($form, &$form_state, $type){
+
+  include_once('forms/depot_ressource_form.php');
+  return depot_ressource_edit_form($form, $form_state, $type);
+
+}
+
+function depot_ressource_edit_form_submit_wrapper($form, &$form_state){
+
+  include_once('forms/depot_ressource_form.php');
+  return depot_ressource_edit_form_submit($form, $form_state);
+
+}
+
 
 function _buchungen_neu_redirect() {
 
@@ -597,6 +669,7 @@ function depot_form_alter(&$form, &$form_state, $form_id) {
       $form['kategorie_id']['#type'] = "select";
       $form['kategorie_id']['#size'] = null;
       $form['kategorie_id']['#default_value'] = 'All';
+      $form['kategorie_id']['#required'] = FALSE;
       $form['kategorie_id']['#options'] = depot_get_kategorien(true);
     
     break;
@@ -624,12 +697,13 @@ function depot_user_view($account, $view_mode) {
       '#attributes' => array('class' => array('user-page-intro-text')),
   );
 
-  if (user_has_role(ROLE_ORGANISATION)){
-    $text = '<p>'.t('<strong>Gemeinwohlanerkennung: <span style="color:green;">Aktiv</span></strong></p><hr />').'</p>';
+  if (user_has_role(ROLE_ORGANISATION_AUTH)){
+    $text = '<p>'.t('<strong>Status der Gemeinwohlanerkennung: <span style="color:green;">Aktiv</span></strong></p><hr />').'</p>';
   } else {
-    $text = '<p>'.t('<strong>Gemeinwohlanerkennung: <span style="color:red;">Inaktiv</span></strong></p><hr />').'</p>';
+    $text = '<p>'.t('<strong>Status der Gemeinwohlanerkennung: <span style="color:red;">Inaktiv</span></strong></p><hr />').'</p>';
   }
   
+  unset($account->content['field_organisation_nachweis']);
   $account->content['field_is_organisation'] = array(
       '#type' => 'user_profile_item',
       '#markup' => $text,
@@ -670,8 +744,9 @@ function depot_get_available_units_by_rid($rid, $start_date, $end_date, $format 
       }
     }
     foreach ($clean_up_ids as $key => $void){
-      if ($event_ids[$key])
+      if (isset($event_ids[$key])){
         unset($event_ids[$key]);
+      }
     }
     return $event_ids;
 
@@ -686,6 +761,7 @@ function depot_get_available_units_by_rid($rid, $start_date, $end_date, $format 
   @return array
 */
 function depot_get_bezirke($format = false){
+  
   if ($format){
     $result = array();
     $result[''] = '<'.t('Alle').'>';
@@ -703,6 +779,7 @@ function depot_get_bezirke($format = false){
  * @return array
  */
 function depot_get_kategorien($format = false){
+
  if ($format){
     $result = array();
     $result[''] = '<'.t('Alle').'>';
@@ -731,28 +808,91 @@ function depot_bat_calendar_settings_alter(&$calendar_settings) {
 
 /** 
  * Wrapper to set [and manipulate] event states 
- * Yet only supports add method
+ * @param action : "add / edit / remove" [TODO]
  */
-function depot_events_bulk_action($type_id, $total_units, $begin, $end, $event_state = 'gebucht'){
-
-  $free_units = depot_get_available_units_by_rid($type_id, $begin, $end);
-  // If meanwhile there was an order: Reduce units number
-  $total_units = (count($free_units) < $total_units) ? count($free_units) : $total_units;
-
+function depot_events_bulk_action($action, $type_id, $total_units, $begin, $end, $event_state = 'gebucht', $label = '', $booking_id = null){
+  
   // Simulate form context
   $context = array(
-    'form_values' => array(
-      'bat_start_date' => $begin,
-      'bat_end_date' => $end,
-      'event_state' => $event_state,
-      'event_type' => 'depot_availability'
+      'isEditAction' => ($action == 'edit'),
+      'form_values' => array(
+        'bat_start_date' => $begin,
+        'bat_end_date' => $end,
+        'event_state' => $event_state,
+        'event_type' => 'depot_availability'
     )
   );
 
-  for ($i = 1; $i <= $total_units; $i++) {
-    $unit = bat_unit_load(str_replace('S','',$free_units[$i]['resourceId']));
-    bat_event_unit_set_state($unit, $context);
+  if (!empty($booking_id)){
+    $context['form_values']['field_booking_id'] = $booking_id;
   }
+
+  if (!empty($label)){
+    $context['form_values']['field_label'] = $label;
+  }
+  
+  $free_units = depot_get_available_units_by_rid($type_id, $begin, $end);
+
+  if ($action == 'add'){
+
+    // If meanwhile there was an order: Reduce units number to avoid over-bookings
+    $total_units = (count($free_units) < $total_units) ? count($free_units) : $total_units;
+    for ($i = 0; $i <= $total_units; $i++) {
+      $unit = bat_unit_load(str_replace('S','',$free_units[$i]['resourceId']));
+      bat_event_unit_set_state($unit, $context);
+    }
+
+  } elseif ($action == 'edit' && !empty($booking_id)){
+
+    // Get connected events
+    $booking_events = db_select('field_data_field_booking_id','e')
+      ->fields('e', array('entity_id'))
+      ->condition('field_booking_id_value', $booking_id)
+      ->execute()
+      ->fetchAll();
+    
+    $event_time = bat_event_load($booking_events[0]->entity_id);
+
+    // If timespan changed: Loop events, set new timespan
+    if ($event_time->start_date != $begin || $event_time->end_date != $end){
+      foreach ($booking_events as $booking_event){
+        $event = bat_event_load($booking_event->entity_id);
+        $event->start_date = $begin;
+        $event->end_date = $end;
+        $event->start_date_object = new DateTime($begin);
+        $event->end_date_object = new DateTime($end);
+        $event->save();
+      }
+    }
+
+    /* IN CASE OF BUGS:
+      $event->start_date = $start_date->format('Y-m-d H:i');
+      // Always subtract one minute from the end time. FullCalendar provides
+      // start and end time with the assumption that the last minute is *excluded*
+      // while BAT deals with times assuming that the last minute is included.
+      $end_date->sub(new DateInterval('PT1M'));
+      $event->end_date = $end_date->format('Y-m-d H:i');
+    */
+
+   // echo count($booking_events);
+   // echo $total_units;
+
+    // If selected more units than before: Set new ones
+    if (count($booking_events) < $total_units && $free_units >= (count($booking_events) - $total_units)){
+      depot_events_bulk_action('add', $type_id, (count($booking_events) - $total_units), $begin, $end, 'gebucht', $label, $booking_id);
+      drupal_set_message('Es wurden @count Einheiten hinzugefügt.', array('@count' => count($booking_events) - $total_units));
+    }
+
+    // If selected less units than before: remove units
+    if (count($booking_events) > $total_units){
+      //echo 'change unit down'; exit();
+      for ($i = 0; $i < (count($booking_events)-$total_units); $i++){
+        $event = bat_event_load($booking_events[$i]->entity_id);
+        $event->delete();
+      }
+    }
+  }
+  // Idea: If edit, collect action-statement and print itvia drupal_set_message
 }
 
 /**
@@ -772,7 +912,7 @@ function depot_units_bulk_action($action, $units_name, $type_id, $total_units){
       if ($units > $total_units){
         // remove
       } else if ($units < $total_units){
-        depot_add_units($type_id, $units_name, $total_units-$units);
+        depot_add_units($type_id, $units_name, $total_units-$units, $units);
       }
 
     } else if ($action == 'remove'){
@@ -797,4 +937,39 @@ function depot_upload_file() {
       return false;
     }
   }
+}
+
+function humanize_price(&$price){
+  
+  if ($price == '0'){
+    $price = null;
+    return;
+  }
+
+  $formatter = new NumberFormatter('de_DE', NumberFormatter::CURRENCY);
+  $price = $formatter->formatCurrency($price, 'EUR');
+
+}
+
+// Especially for buchung form...
+function machine_to_human_price($prices){
+
+  if ($returnAsString = !is_array($prices)){
+    $prices = array($prices);
+  }
+
+  foreach ($prices as $key => $price){
+    if (strpos($price,'.') != FALSE){
+      if (strlen(substr($price,-1,2)) == 1){
+        $prices[$key] = str_replace('.',',',$price).'0';
+      }
+    }     
+  }
+
+  if ($returnAsString){
+    return $prices[0];
+  }
+
+  return $prices;
+
 }

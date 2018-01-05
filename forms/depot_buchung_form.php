@@ -1,24 +1,52 @@
 <?php
 
-function machine_to_human_price($prices){
-
-  if (!is_array($prices)){
-    $prices = array($prices);
-  }
-
-  foreach ($prices as $key => $price){
-    if (strpos($price,'.') != FALSE){
-      if (strlen(substr($price,-1,2)) == 1){
-        $prices[$key] = str_replace('.',',',$price).'0';
-      }
-    }
-  }
-
-  return $prices;
-
+function replace_euro($price){
+  return str_replace('€','',$price);
 }
 
-function __depot_booking_edit_form_set_params(&$params){
+function depot_calc_price($ressource, $params, $total_time){
+  
+    $preis = array();
+    $preis['res_preis'] = (isset($ressource['field_gemeinwohl']['und'][0]['value']) && $ressource['field_gemeinwohl']['und'][0]['value']) ? replace_euro($ressource['field_kosten_2']['und'][0]['value']) : replace_euro($ressource['field_kosten']['und'][0]['value']);
+    $preis['res_kaution'] = (isset($ressource['field_kaution']['und'][0]['value'])) ? replace_euro($ressource['field_kaution']['und'][0]['value']) : 0;
+    $preis['res_takt'] = replace_euro($ressource['field_abrechnungstakt']['und'][0]['value']);
+    $preis['res_tax'] = (isset($ressource['field_mwst']['und'])) ? replace_euro($ressource['field_mwst']['und'][0]['value']) : 0;
+  
+    $preis['preis_plain'] = 0;
+    $preis['preis_tax'] = 0;
+    $preis['preis_kaution'] = 0;
+    $preis['preis_total'] = 0;
+  
+    if ($preis['res_kaution'] > 0){
+      $preis['preis_kaution'] = $preis['res_kaution'] * $params['einheiten'];
+    }
+  
+    $preis['preis_plain'] = $preis['res_preis'] * $total_time * $params['einheiten'];
+  
+    if ($preis['res_tax'] > 0){
+      $preis['preis_tax'] = $preis['preis_plain'] * $preis['res_tax'] / 100;
+      $preis['preis_total'] = $preis['preis_plain'] + $preis['preis_tax'];
+    } else {
+      $preis['preis_total'] = $preis['preis_plain'];
+    }
+  
+    $preis['preis_total'] += $preis['preis_kaution'];
+    
+    return $preis;
+    
+}
+
+function __depot_booking_edit_form_set_params(&$params, $booking = null){
+
+  if (isset($booking) && !empty($booking)){
+    $params = array(
+      'rid' => $booking->field_ressource_id['und'][0]['value'],
+      'begin' => $booking->booking_start_date['und'][0]['value'],
+      'end' => $booking->booking_end_date['und'][0]['value'],
+      'einheiten' => $booking->field_einheiten['und'][0]['value']
+    );
+    return;
+  }
 
   foreach (drupal_get_query_parameters() as $param => $val){
     $params[$param] = $val;
@@ -36,23 +64,20 @@ function __depot_booking_edit_form_set_params(&$params){
 function depot_booking_edit_form($form, &$form_state, $booking) {
 
   global $user;
+
+  $force_header_only = (isset($booking->force_header_only));
+  
   $user = user_load($user->uid);
   $edit_mode = (!empty($booking->booking_end_date));
   $params = array();
   $begin = null;
   $end = null;
-  // Add the field related form elements of bat_booking entity
   $form_state['bat_booking'] = $booking;
 
   if ($edit_mode){
 
-    $params = array(
-      'rid' => $booking->field_ressource_id['und'][0]['value'],
-      'begin' => $booking->booking_start_date['und'][0]['value'],
-      'end' => $booking->booking_end_date['und'][0]['value'],
-      'einheiten' => $booking->field_einheiten['und'][0]['value']
-    );
-
+    __depot_booking_edit_form_set_params($params, $booking);
+    
     $begin = new DateTime($params['begin']);
     $end = new DateTime($params['end']);
     
@@ -83,9 +108,13 @@ function depot_booking_edit_form($form, &$form_state, $booking) {
   $anbieter->is_organisation = in_array(ROLE_ORGANISATION_NAME, $anbieter->roles);
   $allow_change = (user_has_role(ROLE_ADMINISTRATOR) || $edit_mode);  
 
+  // Changes have to be appended further down (submit-edit-action)
   if ($ressource['field_abrechnungstakt']['und'][0]['value'] == 0){
-    // granulartiy: daily
+    // granularity: daily
     $total_time = $begin->diff($end)->format('%a');
+    if ($begin->format('Hi') > $end->format('Hi')){
+      $total_time++;
+    }
     $total_time_readable = $total_time . ' ' . ($total_time == 1 ? t('Tag') : t('Tage'));
   } else {
     // hourly
@@ -93,19 +122,28 @@ function depot_booking_edit_form($form, &$form_state, $booking) {
   }
 
   if (!$edit_mode){
-    // TODO: Dates in future?
+
+    if ($begin->format('Ymd') < date('Ymd')){
+      drupal_set_message(t('Der gewählte Zeitraum muss in der Zukunft liegen.'),'error');
+      depot_form_goto('ressourcen/'.$params['rid']);
+    }
+    
     if (empty($avail_units)){
       drupal_set_message(t('Keine Einheiten in diesem Zeitraum verfügbar'),'error');
       depot_form_goto('ressourcen/'.$params['rid']);
     }
 
     if ($avail_units < $params['einheiten']){
-      drupal_set_message(t('Achtung: Es sind in diesem Zeitraum nur @anzahl Einheit(en) verfügbar.',array('@anzahl' => $avail_units)), 'warning');
+      if ($avail_units == 0){
+        drupal_set_message(t('Achtung: Es sind in diesem Zeitraum keine Einheiten mehr verfügbar. Entschuldige die Unannehmlichkeiten.'));       
+        depot_form_goto('ressourcen/'.$params['rid']);        
+      }
+      drupal_set_message(t('Achtung: Es sind in diesem Zeitraum nur @anzahl Einheit(en) verfügbar. Wir haben Deine Auswahl entsprechend angepasst.',array('@anzahl' => $avail_units)), 'warning');
       $params['einheiten'] = $avail_units;
     }
   
     if (empty($ressource)){
-      drupal_set_message(t('Dieses Angebot existiert nicht.'),'error');
+      drupal_set_message(t('Dieses Angebot existiert nicht (mehr).'),'error');
       depot_form_goto('ressourcen');
     }
 
@@ -119,33 +157,7 @@ function depot_booking_edit_form($form, &$form_state, $booking) {
       depot_form_goto('ressourcen/'.$params['rid']);
     }
     
-    // Calculate price
-    $preis = array();
-
-    $preis['res_preis'] = (isset($ressource['field_gemeinwohl']['und'][0]['value']) && $ressource['field_gemeinwohl']['und'][0]['value']) ? $ressource['field_kosten_2']['und'][0]['value'] : $ressource['field_kosten']['und'][0]['value'];
-    $preis['res_kaution'] = (isset($ressource['field_kaution']['und'][0]['value'])) ? $ressource['field_kaution']['und'][0]['value'] : 0;
-    $preis['res_takt'] = $ressource['field_abrechnungstakt']['und'][0]['value'];
-    $preis['res_tax'] = (isset($ressource['field_mwst']['und'])) ? $ressource['field_mwst']['und'][0]['value'] : 0;
-
-    $preis['preis_plain'] = 0;
-    $preis['preis_tax'] = 0;
-    $preis['preis_kaution'] = 0;
-    $preis['preis_total'] = 0;
-
-    if ($preis['res_kaution'] > 0){
-      $preis['preis_kaution'] = $preis['res_kaution'] * $params['einheiten'];
-    }
-
-    $preis['preis_plain'] = $preis['res_preis'] * $total_time * $params['einheiten'];
-
-    if ($preis['res_tax'] > 0){
-      $preis['preis_tax'] = $preis['preis_plain'] * $preis['res_tax'] / 100;
-      $preis['preis_total'] = $preis['preis_plain'] + $preis['preis_tax'];
-    } else {
-      $preis['preis_total'] = $preis['preis_plain'];
-    }
-
-    $preis['preis_total'] += $preis['preis_kaution'];
+    $preis = depot_calc_price($ressource, $params, $total_time);
 
   }
 
@@ -172,7 +184,7 @@ function depot_booking_edit_form($form, &$form_state, $booking) {
     </div>';
 
   $price_card_tooltip = '
-    <p>'.t('Preis pro Einheit').': '. $preis['res_preis'] . '€</p>' 
+    <p>'.t('Preis pro Einheit / Tag').': '. $preis['res_preis'] . '€</p>' 
     .($preis['res_kaution'] > 0 ? '<p>'.t('Kaution pro Einheit').': '. $preis['res_kaution'].'€</p>' : '')
     . '<hr /><p>'.t('x Gewählte Einheiten') .': '. $params['einheiten'].'</p>'
     . '<p>'.t('x Zeitraum').': '.$total_time_readable.'</p>';
@@ -189,14 +201,18 @@ function depot_booking_edit_form($form, &$form_state, $booking) {
   
   $status_col = null;
 
-  if ($edit_mode){
+  if ($edit_mode && !$force_header_only){
     if ($booking->field_genehmigt['und'][0]['value'] == 0){
       $status_col = '<div id="booking-status">'.t('Buchungsstatus').': <strong>'. t('Ausstehend').'</strong></div>';
     } else {
       $status_col = '<div id="booking-status" class="genehmigt"><i class="fi fi-checkbox"></i> '.t('Buchungsstatus').': <strong>'.t('Akzeptiert').'</strong></div>';      
     }
     if ($user_is_anbieter){
-      $status_col .= '<a href="/reservierungen/'.$booking->booking_id.'/change_status" class="right" style="padding-right:10px;">'.t('Status ändern').'</a>';
+      // Outlined because we do not want the user to de-activate activated reservations yet
+      //$status_col .= '<a href="/reservierungen/'.$booking->booking_id.'/change_status" class="right" style="padding-right:10px;">'.t('Status ändern').'</a>';
+    }
+    if ($booking->field_genehmigt['und'][0]['value'] && isset($ressource['field_verleihvertrag_']['und'][0]['value']) && $ressource['field_verleihvertrag_']['und'][0]['value']){
+      $status_col .= '<a href="/reservierungen/'.$booking->booking_id.'/verleihvertrag" class="right" style="padding-right:10px;">'.t('Verleihvertrag').'</a>';      
     }
   }
   
@@ -204,22 +220,34 @@ function depot_booking_edit_form($form, &$form_state, $booking) {
    '#markup' => '<div id="buchung-header" class="panel callout row"><div class="medium-12 column"><h5 class="left">'.t('Ihre Reservierung').'</h5>'.$status_col.'<hr /></div>'. $res_col . $time_col . $price_col . '</div>',
    '#weight' => -98
   );
-  // HERE
+
+  $deleteButtonConfirm = "javascript:if(confirm('".t('Bist Du sicher? Gelöschte Reservierungen können nicht mehr rückgängig gemacht werden.')."')){return true;}else{return false;}";
+
   $deleteButton = array(
-    '#markup' => '<a class="secondary button" href="/reservierungen/'.$booking->booking_id.'/delete">'.t('Buchung unwiderruflich stornieren').'</a>',
+    '#markup' => '<a class="secondary button" onclick="'.$deleteButtonConfirm.'" href="/reservierungen/'.$booking->booking_id.'/delete">'.t('Buchung unwiderruflich stornieren').'</a>',
     '#weight' => 45,
   );
 
   $datesShow = false;
   $datesAllowEdit = false;
   
-  if ($edit_mode){
-    if (!$user_is_anbieter){
+  if ($force_header_only || $edit_mode){
+    if ($force_header_only || !$user_is_anbieter){
 
       field_attach_form('bat_booking', $booking, $form, $form_state, isset($booking->language) ? $booking->language : NULL, array('field_name' => 'field_geplante_nutzung'));  
       field_attach_form('bat_booking', $booking, $form, $form_state, isset($booking->language) ? $booking->language : NULL, array('field_name' => 'field_nachricht_an_den_anbieter'));  
+      field_attach_form('bat_booking', $booking, $form, $form_state, isset($booking->language) ? $booking->language : NULL, array('field_name' => 'field_ausleiher_name'));  
+      field_attach_form('bat_booking', $booking, $form, $form_state, isset($booking->language) ? $booking->language : NULL, array('field_name' => 'field_ausleiher_telefonnummer'));  
+      field_attach_form('bat_booking', $booking, $form, $form_state, isset($booking->language) ? $booking->language : NULL, array('field_name' => 'field_ausleiher_email'));  
+      
       $form['field_geplante_nutzung']['#disabled'] = TRUE;
       $form['field_nachricht_an_den_anbieter']['#disabled'] = TRUE;
+      $form['field_ausleiher_name']['#disabled'] = TRUE;
+      $form['field_ausleiher_telefonnummer']['#disabled'] = TRUE;
+      $form['field_ausleiher_email']['#disabled'] = TRUE;
+      $form['field_ausleiher_name']['#attributes']['class'] = array('medium-4 column');
+      $form['field_ausleiher_telefonnummer']['#attributes']['class'] = array('medium-4 column');
+      $form['field_ausleiher_email']['#attributes']['class'] = array('medium-4 column');
       
       $form['actions'] = array(
         '#type' => 'actions',
@@ -249,6 +277,17 @@ function depot_booking_edit_form($form, &$form_state, $booking) {
     $form['field_geplante_nutzung']['#disabled'] = TRUE;      
     $form['field_nachricht_an_den_anbieter']['#disabled'] = TRUE;
     $form['field_buchung_bedingungen']['#access'] = FALSE;
+    $form['field_ausleiher_name']['#disabled'] = TRUE;
+    $form['field_ausleiher_telefonnummer']['#disabled'] = TRUE;
+    $form['field_ausleiher_email']['#disabled'] = TRUE;
+  } else {
+    if (isset($user->field_vorname['und'][0]['value'])){
+      $form['field_ausleiher_name']['und'][0]['value']['#default_value'] = $user->field_vorname['und'][0]['value'];
+    }
+    if (isset($user->field_telefonnummer['und'][0]['value'])){
+      $form['field_ausleiher_telefonnummer']['und'][0]['value']['#default_value'] = $user->field_telefonnummer['und'][0]['value'];
+    }
+    $form['field_ausleiher_email']['und'][0]['value']['#default_value'] = $user->mail;
   }
 
   $datesAllowEdit = true;
@@ -257,23 +296,28 @@ function depot_booking_edit_form($form, &$form_state, $booking) {
   $form['booking_start_date']['#disabled'] = !$datesAllowEdit;
   $form['booking_start_date']['und'][0]['#title'] = t('Start Ausleihe');
   $form['booking_start_date']['und'][0]['#default_value']['value'] = $begin_bat;
+  if (!$datesAllowEdit){
+    $form['booking_start_date']['und'][0]['#description'] = t('Unveränderbar, da Reservierung bereits bestätigt');
+  }
   $form['booking_end_date']['#attributes']['class'][] = 'medium-6 column'.(!$datesShow ? ' hide' : '');
   $form['booking_end_date']['#disabled'] = !$datesAllowEdit;
   $form['booking_end_date']['und'][0]['#title'] = t('Ende Ausleihe');
   $form['booking_end_date']['und'][0]['#default_value']['value'] = $end_bat;
 
   $options = array();
+
   // $result[''] = '<'.t('Alle').'>';
-  for ($i = 1; $i<=$avail_units; $i++){
+  for ($i = 1; $i <= ($ressource['field_anzahl_einheiten']['und'][0]['value']); $i++){
     $options[$i] = $i;
   }
-  
+
   //$form['field_einheiten']['#default_value'] = $params['einheiten'];
-  $form['field_einheiten']['und']['#attributes']['class'][] = 'medium-4 column';
+  $form['field_einheiten']['und']['#attributes']['class'][] = 'medium-12 column';
+  $form['field_einheiten']['und']['#description'] .= '. <strong>Achtung:</strong> Eine nachträgliche Erhöhung der Einheiten kann Überbuchungen zur Folge haben'; 
   $form['field_einheiten']['und']['#disabled'] = !$datesAllowEdit;
-  $form['field_einheiten']['und']['#access'] = false;//$datesShow;
+  $form['field_einheiten']['und']['#access'] = $datesShow;
   $form['field_einheiten']['und']['#options'] = $options;
-  $form['field_einheiten']['und']['#default_value'] = array($params['einheiten'] => $params['einheiten']);
+  $form['field_einheiten']['und']['#default_value'] = array($params['einheiten']);
 
   $form['field_preis']['und'][0]['#access'] = false; //$allow_change;
   $form['field_preis']['und'][0]['value']['#default_value'] = $preis['preis_total'];
@@ -284,7 +328,7 @@ function depot_booking_edit_form($form, &$form_state, $booking) {
     '#weight' => 99,
   );
 
-  $access = user_has_role(ROLE_ADMINISTRATOR); // || user_access('bypass bat_booking entities access')
+  $access = false;//user_has_role(ROLE_ADMINISTRATOR); // || user_access('bypass bat_booking entities access')
 
   // Type author information for administrators.
   $form['author'] = array(
@@ -351,13 +395,6 @@ function depot_booking_edit_form($form, &$form_state, $booking) {
   $form['field_preis_meta']['#access'] = FALSE;
   $form['field_preis_meta']['und'][0]['value']['#default_value'] = serialize($preis);
   
-  if (isset($user->field_vorname['und'][0]['value'])){
-    $form['field_ausleiher_name']['und'][0]['value']['#default_value'] = $user->field_vorname['und'][0]['value'];
-  }
-  if (isset($user->field_telefonnummer['und'][0]['value'])){
-    $form['field_ausleiher_telefonnummer']['und'][0]['value']['#default_value'] = $user->field_telefonnummer['und'][0]['value'];
-  }
-  $form['field_ausleiher_email']['und'][0]['value']['#default_value'] = $user->mail;
   $form['field_ausleiher_name']['#attributes']['class'] = array('medium-4 column');
   $form['field_ausleiher_telefonnummer']['#attributes']['class'] = array('medium-4 column');
   $form['field_ausleiher_email']['#attributes']['class'] = array('medium-4 column');
@@ -432,9 +469,13 @@ function depot_booking_edit_form_submit(&$form, &$form_state) {
   
   $booking = entity_ui_controller('bat_booking')->entityFormSubmitBuildEntity($form, $form_state);
   $isNewBooking = empty($booking->label);
-
-  __depot_booking_edit_form_set_params($params);  
-
+  $params = array();
+  
+  if ($isNewBooking){
+    __depot_booking_edit_form_set_params($params);  
+  } else {
+    __depot_booking_edit_form_set_params($params, $booking);      
+  }
   $ressource = get_object_vars(bat_type_load($params['rid']));
   $anbieter = user_load($ressource['revision_uid']);
 
@@ -444,26 +485,19 @@ function depot_booking_edit_form_submit(&$form, &$form_state) {
   if (isset($booking->author_name) && $isNewBooking) {
     if ($account = user_load_by_name($booking->author_name)) {
       $booking->uid = $account->uid;
-    }
-    else {
+    } else {
       $booking->uid = 0;
     }
   }
 
-  $booking->save();
+  $begin = $form['booking_start_date']['und'][0]['#default_value']['value'];
+  $end =  $form['booking_end_date']['und'][0]['#default_value']['value'];
 
   if ($isNewBooking){
-    $params = array();
-    /*
-     Setze Anzahl x units auf ausgebucht
-     TODO:
-     Generiere Verleihvertrag
-     Mail an Anbieter
-     Mail an Interessent
-    */
-    depot_events_bulk_action($params['rid'], $params['einheiten'], $form['booking_start_date']['und'][0]['#default_value']['value'], $form['booking_end_date']['und'][0]['#default_value']['value']);
 
-    // Generiere Verleihvertrag
+    $booking->save();
+
+    depot_events_bulk_action('add', $params['rid'], $params['einheiten'], $begin, $end, 'gebucht', 'Reservierung Nutzer '.$user->name, $booking->booking_id);
 
     $mail_body = "Lieber Anbieter beim Depot Leipzig,\r\n\r\n";
     $mail_body .= "Der Nutzer ".$user->name." hat folgende Reservierungsanfrage über das Depot gestellt:\r\n\r\n";
@@ -486,16 +520,44 @@ function depot_booking_edit_form_submit(&$form, &$form_state) {
     
     $mail_body = str_replace('Ihre Reservierung','',$mail_body);
 
-    $params = array(
+    $mail_params = array(
       'body' => strip_tags($mail_body,'<p><h4><br><br><div>'),
       'subject' => t('Depot Leipzig: Reservierungsanfrage'),
     );
   
-    drupal_mail('depot','depot_buchung_form', $anbieter->mail,'de', $params);
-    
+    drupal_mail('depot','depot_buchung_form', $anbieter->mail,'de', $mail_params);
     drupal_set_message(t('Ihre Reservierung wurde gespeichert und der Ressourceninhaber informiert. Dieser wird sich mit Ihnen in Verbindung setzen.'));    
+  
   } else {
-    drupal_set_message(t('Die Reservierung wurde erfolgreich bearbeitet.'));
+
+    $begin_dt = new DateTime($begin);
+    $end_dt   = new DateTime($end);
+
+    if ($ressource['field_abrechnungstakt']['und'][0]['value'] == 0){
+      // granularity: daily
+      $total_time = $begin_dt->diff($end_dt)->format('%a');
+      if ($begin_dt->format('Hi') > $end_dt->format('Hi')){
+        $total_time++;
+      }
+      $total_time_readable = $total_time . ' ' . ($total_time == 1 ? t('Tag') : t('Tage'));
+    } else {
+      // hourly
+      $total_time = $begin_dt->diff($end_dt)->format('%H:%I');   
+    }
+
+    // Eventually, units and date changed -> recalc price
+    // TODO: Change after anti-over-booking-feature has been implemented
+    $ressource = get_object_vars(bat_type_load($params['rid']));
+    $preis = depot_calc_price($ressource, $params, $total_time);
+    $preis = machine_to_human_price($preis);
+
+    $booking->field_preis['und'][0]['value'] = $preis['preis_total'];    
+    $booking->field_preis_meta['und'][0]['value'] = serialize($preis);
+    $booking->save(); // Append price changes
+
+    depot_events_bulk_action('edit', $params['rid'], $params['einheiten'], $begin, $end, 'gebucht', 'Reservierung Nutzer '.$user->name, $booking->booking_id);
+    drupal_set_message(t('Die Reservierung wurde erfolgreich bearbeitet. Dabei wurde ggf. ein neuer Gesamtpreis kalkuliert.'));
+  
   }
 
   $form_state['redirect'] = 'mein-depot/reservierungen';

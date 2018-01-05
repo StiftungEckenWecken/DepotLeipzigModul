@@ -14,15 +14,12 @@ function depot_user_organisation_form($form, &$form_state) {
   $is_organisation_auth = user_has_role(ROLE_ORGANISATION_AUTH);  
 
   if ($is_organisation_auth){
-    $intro_text .= '<p>'.t('<strong>Gemeinwohlanerkennung: <span style="color:green;">Aktiv</span></strong></p><hr />').'</p>';
-  } else {
-    $intro_text .= '<p>'.t('<strong>Gemeinwohlanerkennung: <span style="color:red;">Inaktiv</span></strong></p><hr />').'</p>';
+    $intro_text .= '<p>'.t('<strong>Aktueller Status der Gemeinwohlanerkennung: <span style="color:green;">Aktiv</span></strong></p><hr />').'</p>';
+    $form['intro'] = array(
+      '#markup' => $intro_text,
+      '#weight' => '-99'
+    );
   }
-
-  $form['intro'] = array(
-    '#markup' => $intro_text,
-    '#weight' => '-99'
-  );
 
   $form['organisation_ja'] = array(
     '#type' => 'checkbox',
@@ -63,7 +60,7 @@ function depot_user_organisation_form($form, &$form_state) {
   if (!$is_organisation){
     $form['submit'] = array(
       '#type' => 'submit',
-      '#value' => 'Beantragen',
+      '#value' => t('Speichern'),
       '#attributes' => array(
         'class' => array('button expand')
       ),
@@ -106,7 +103,7 @@ function depot_user_organisation_form_submit(&$form, &$form_state) {
         )
       )
     )
-  );
+  ); 
 
   user_save($user, $userEdit);
 
@@ -116,7 +113,7 @@ function depot_user_organisation_form_submit(&$form, &$form_state) {
   // Finished, flush cash
   //cache_clear_all('menu:'. $user->uid, TRUE);
 
-  drupal_set_message(t('Ihr Profil wurde erfolgreich als Organisation aufgewertet. Sie können sich nun zusätzlich als gemeinnützig anerkennen lassen (s.u.).'));
+  drupal_set_message(t('Ihr Profil wurde erfolgreich als Organisation aufgewertet. Sie können sich nun zusätzlich als Gemeinwohl-Organisation anerkennen lassen (s.u.).'));
 
 }
 
@@ -127,10 +124,9 @@ function depot_user_organisation_request_form($form, &$form_state) {
 
   global $user;
 
-  $intro_text = '<hr /><h3>'.t('Als gemeinnützig anerkennen lassen').'</h3>';
+  $intro_text = '<hr /><h3>'.t('Als Gemeinwohl-Organisation anerkennen lassen').'</h3>';
   $intro_text .= '<p>'.t('Hier kannst Du die Organisation für die Du handelst als Gemeinwohl-Organisation anerkennen lassen, um günstiger Ressourcen ausleihen zu können. Erläuterungen dazu siehe <a href="/faq">hier</a>. Wenn Deine Organisation keinen Freistellungsbescheid hat, stelle bitte kurz dar, wie Deine Organisation das Gemeinwohl stärkt.').'</p>';
-
-  //form_load_include($form_state, 'inc', 'mymodule', 'plugins/content_types/NAME_OF_YOUR_CONTENT_TYPE/FILE);
+  $intro_text .= '<p>'.t('<strong>Aktueller Status der Gemeinwohlanerkennung: <span style="color:red;">Inaktiv</span></strong></p><hr />').'</p>';
 
   $form['#attributes']['enctype'] = "multipart/form-data";
   
@@ -171,7 +167,7 @@ function depot_user_organisation_request_form($form, &$form_state) {
   
   $form['submit'] = array(
     '#type' => 'submit',
-    '#value' => t('Gemeinnützigkeit beantragen'),
+    '#value' => t('Anerkennung als Gemeinwohl-Organisation beantragen'),
     '#attributes' => array(
       'class' => array('button expand')
     ),
@@ -230,18 +226,28 @@ function depot_user_organisation_request_form_submit(&$form, &$form_state) {
     exit();
   }*/
 
-  $mail_body = "Lieber Administrator,\r\n";
+  $mail_body = "Lieber Administrator,\r\n\r\n";
   $mail_body .= "Ein Nutzer hat um Anerkennung auf Gemeinnützigkeit gebeten.\r\n";
-  $mail_body .= "Das Profil ist unter ".$base_url."/user/".$user->uid."/edit zu finden.\r\n";
-  $mail_body .= "Als Bewilligungsgrund wurde folgender genannt: '".$form_state['values']['begruendung']."'\r\n";
+  $mail_body .= "Das Profil ist unter ".$base_url."/user/".$user->uid."/edit zu finden.\r\n\r\n";
+  $mail_body .= "Als Bewilligungsgrund wurde folgender genannt: '".$form_state['values']['begruendung']."'\r\n\r\n";
 
   if (!empty($anhang_path)){
-    $mail_body .= "Es wurde zudem ein Anhang unter ". $anhang_path ." hinterlegt.\r\n";
+
+    user_save($user, array(
+      'field_organisation_nachweis' => array(
+        'und' => array(
+          0 => array(
+            'value' => $anhang_path
+          ) 
+        )
+      ),
+    )); 
+
+    $mail_body .= "Es wurde zudem ein Anhang unter ". $anhang_path ." hinterlegt und mit dem Nutzerprofil verknüpft\r\n\r\n";
   }
 
   $mail_body .= "Um dem Antrag zu zustimmen, gehen Sie bitte in Ihrem Browser auf ". $base_url ."/depot/user_auth_confirm/".$user->uid;
 
-  //$cc = user_load(1)->mail;
   $params = array(
     'body' => $mail_body,
     'subject' => t('Depot Leipzig: Antrag auf Gemeinnützigkeit'),
