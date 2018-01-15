@@ -103,7 +103,7 @@ function depot_booking_edit_form($form, &$form_state, $booking) {
 
   $ressource = get_object_vars(bat_type_load($params['rid']));
   $user_is_organisation = in_array(ROLE_ORGANISATION_AUTH_NAME, $user->roles);
-  $anbieter = user_load($ressource['revision_uid']);
+  $anbieter = user_load($ressource['uid']);
   $user_is_anbieter = ($anbieter->uid === $user->uid);  
   $anbieter->is_organisation = in_array(ROLE_ORGANISATION_NAME, $anbieter->roles);
   $allow_change = (user_has_role(ROLE_ADMINISTRATOR) || $edit_mode);  
@@ -112,8 +112,11 @@ function depot_booking_edit_form($form, &$form_state, $booking) {
   if ($ressource['field_abrechnungstakt']['und'][0]['value'] == 0){
     // granularity: daily
     $total_time = $begin->diff($end)->format('%a');
-    if ($begin->format('Hi') > $end->format('Hi')){
+    if ($begin->format('Hi') < $end->format('Hi')){
       $total_time++;
+    }
+    if ($total_time == 0){
+      $total_time = 1;
     }
     $total_time_readable = $total_time . ' ' . ($total_time == 1 ? t('Tag') : t('Tage'));
   } else {
@@ -166,10 +169,10 @@ function depot_booking_edit_form($form, &$form_state, $booking) {
   // Build columns for header panel 
   $res_col = '
     <div class="medium-4 column">
-      <h4><i class="fi fi-burst"></i>'.$ressource['name'].'</h4>';
-  if ($anbieter->is_organisation){
+      <h4><i class="fi fi-burst"></i>'. ($force_header_only ? t('Ressource').': ' : '') . $ressource['name'].'</h4>';
+  if ($anbieter->is_organisation && !$force_header_only){
     $res_col .= '<p>'.$anbieter->field_organisation_name['und'][0]['value'] .' ('. $anbieter->field_organisation_typ['und'][0]['value'] .')</p>';
-  } else {
+  } else if (!$force_header_only) {
     $res_col .= '<p><strong>'.t('Anbieter').':</strong> '.$anbieter->field_anrede['und'][0]['value'].' '.$anbieter->field_vorname['und'][0]['value'].' '.$anbieter->field_nachname['und'][0]['value'].'</p>';
   }
   
@@ -179,7 +182,7 @@ function depot_booking_edit_form($form, &$form_state, $booking) {
   $time_col = '
     <div class="medium-4 column">
       <h4><i class="fi fi-calendar"></i>'. t('Zeitraum') .'</h4>
-      <p>'. date_format($begin, 'd.m., H:i') .' bis '. date_format($end, 'd.m.Y, H:i') .' ('. $total_time_readable .')</p>
+      <p>'. date_format($begin, 'd.m., H:i') .' '.t('bis').' '. date_format($end, 'd.m.Y, H:i') .' ('. $total_time_readable .')</p>
       <p>'.t('Anzahl gewählter Einheiten').': '.$params['einheiten'].'</p>
     </div>';
 
@@ -190,7 +193,7 @@ function depot_booking_edit_form($form, &$form_state, $booking) {
     . '<p>'.t('x Zeitraum').': '.$total_time_readable.'</p>';
 
   $price_col = '
-  <div class="medium-4 column">
+  <div class="medium-4 column aside-price">
     <h4><i class="fi fi-price-tag"></i>'. t('Preis').'</h4>
     <i class="fi fi-info has-tip" data-tooltip aria-haspopup="true" title="'.$price_card_tooltip.'"></i>
      <p><strong>'. t('Netto') .'</strong>: '. $preis['preis_plain'] .'€</p>
@@ -477,7 +480,7 @@ function depot_booking_edit_form_submit(&$form, &$form_state) {
     __depot_booking_edit_form_set_params($params, $booking);      
   }
   $ressource = get_object_vars(bat_type_load($params['rid']));
-  $anbieter = user_load($ressource['revision_uid']);
+  $anbieter = user_load($ressource['uid']);
 
   $booking->created = !empty($booking->date) ? strtotime($booking->date) : REQUEST_TIME;
   $booking->changed = time();
@@ -491,7 +494,7 @@ function depot_booking_edit_form_submit(&$form, &$form_state) {
   }
 
   $begin = $form['booking_start_date']['und'][0]['#default_value']['value'];
-  $end =  $form['booking_end_date']['und'][0]['#default_value']['value'];
+  $end   =  $form['booking_end_date']['und'][0]['#default_value']['value'];
 
   if ($isNewBooking){
 
@@ -508,8 +511,8 @@ function depot_booking_edit_form_submit(&$form, &$form_state) {
       $mail_body .= "Zudem hat der Interessent folgende Nachricht hinterlassen: '".$form['field_nachricht_an_den_anbieter']['und'][0]['value']['#value']."'.\r\n\r\n";
     }
 
-    $mail_body .= "Diese und alle weiteren Details lassen sich über folgenden Link einsehen und ggf. bearbeiten: ". $base_url ."/reservierungen/".$booking->booking_id."/edit\r\n";
-    $mail_body .= "Bist Du mit der Reservierung einverstanden vergiss bitte nicht, diese auch zu genehmigen, damit der Nutzer hierüber informiert";
+    $mail_body .= "Diese und alle weiteren Details lassen sich über folgenden Link einsehen und ggf. bearbeiten: ". $base_url ."/reservierungen/".$booking->booking_id."/edit\r\n\r\n";
+    $mail_body .= "Bist Du mit der Reservierung einverstanden, vergiss bitte nicht, diese auch zeitnah zu genehmigen, damit der Nutzer hierüber vom Depot Leipzig informiert";
     
     if (isset($ressource['field_verleihvertrag_']['und'][0]['value']) && $ressource['field_verleihvertrag_']['und'][0]['value']){
       $mail_body .= " und, wie gewünscht, ein Verleihvertrag erstellt";
@@ -538,6 +541,9 @@ function depot_booking_edit_form_submit(&$form, &$form_state) {
       $total_time = $begin_dt->diff($end_dt)->format('%a');
       if ($begin_dt->format('Hi') > $end_dt->format('Hi')){
         $total_time++;
+      }
+      if ($total_time == 0){
+        $total_time = 1;
       }
       $total_time_readable = $total_time . ' ' . ($total_time == 1 ? t('Tag') : t('Tage'));
     } else {

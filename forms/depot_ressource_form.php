@@ -68,6 +68,8 @@ function depot_ressource_edit_form($form, &$form_state, $type) {
     }
   };
 
+  natcasesort($kategorien);
+
   $form['field_fake_kategorie']['#type'] = 'select';
   $form['field_fake_kategorie']['#selected'] = TRUE;
   $form['field_fake_kategorie']['#required'] = TRUE;  
@@ -417,9 +419,10 @@ function depot_ressource_edit_form_submit(&$form, &$form_state) {
       $user = user_load($type->uid);
 
       $mail_body = "Lieber Depot-Nutzer,\r\n\r\n";
-      $mail_body .= "Deine Ressource *".$type->name."* wurde nun durch unser Team freigeschaltet.\r\n\r\n";
-      $mail_body .= "Vielen Dank für das Teilen Deines Angebotes. Wir hoffen, Du wirst damit Freude haben! Sollten weitere Fragen oder Anregungen bestehen, zögere nicht, diese uns über das Kontaktformular mitzuteilen!\r\n\r\n";
-      $mail_body .= "Dein Team vom Depot Leipzig";
+      $mail_body .= "Deine Ressource *".$type->name."* wurde durch das Depot-Team freigeschaltet und steht nun im Web zur Buchung bereit.\r\n\r\n";
+      $mail_body .= "Vielen Dank, dass Du die Ressource im depot-leipzig.de zur Mitnutzung bereitgestellt hast. Wir hoffen, viele nette Leute werden sie mit Dir teilen.\r\n\r\n";
+      $mail_body .= "Hast Du Fragen oder Anregungen zum Depot? Hier hilft Dir die kleine Bedienungsanleitung (https://depot-leipzig.de/so-funktionierts) oder die Antworten auf häufig gestellte Fragen (https://depot-leipzig.de/faq) weiter. Für Anregungen oder offene Fragen zögere nicht, uns diese über das Kontaktformular unter https://depot-leipzig.de/contact mitzuteilen.";
+      $mail_body .= "Viele Grüße,\r\nDein Team vom Depot Leipzig";
 
       $params = array(
         'body' => $mail_body,

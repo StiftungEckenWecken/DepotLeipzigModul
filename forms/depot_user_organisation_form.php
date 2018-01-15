@@ -21,21 +21,22 @@ function depot_user_organisation_form($form, &$form_state) {
     );
   }
 
+  /*
   $form['organisation_ja'] = array(
     '#type' => 'checkbox',
     '#title' => t('Als Organisation auftreten'),
     '#default_value' => 1,
     '#disabled' => $is_organisation
-  );
+  );*/
 
   $form['organisationstyp'] = array(
     '#type' => 'select',
     '#title' => t('Organisationstyp'),
     '#options' => array(
-      'stiftung' => t('Stiftung'),
-      'verein' => t('Verein'),
-      'unternehmen' => t('Unternehmen'),
-      'sontiges' => t('Sonstiges'),
+      'Stiftung' => t('Stiftung'),
+      'Verein' => t('Verein'),
+      'Unternehmen' => t('Unternehmen'),
+      'Sontige Organisation' => t('Sonstiges'),
     ),
     '#disabled' => $is_organisation,
     '#default_value' => $user->field_organisation_typ['und'][0]['value']
@@ -202,6 +203,7 @@ function depot_user_organisation_request_form_validate(&$form, &$form_state) {
 function depot_user_organisation_request_form_submit(&$form, &$form_state) {
 
   global $user;
+  $user = user_load($user);
   global $base_url;
 
   $anhang_path = null;
@@ -227,7 +229,7 @@ function depot_user_organisation_request_form_submit(&$form, &$form_state) {
   }*/
 
   $mail_body = "Lieber Administrator,\r\n\r\n";
-  $mail_body .= "Ein Nutzer hat um Anerkennung auf Gemeinnützigkeit gebeten.\r\n";
+  $mail_body .= "Der Nutzer ". $user->name ." hat für ".$user->field_organisation_name['und'][0]['value']." um Anerkennung auf Gemeinnützigkeit gebeten.\r\n\r\n";
   $mail_body .= "Das Profil ist unter ".$base_url."/user/".$user->uid."/edit zu finden.\r\n\r\n";
   $mail_body .= "Als Bewilligungsgrund wurde folgender genannt: '".$form_state['values']['begruendung']."'\r\n\r\n";
 

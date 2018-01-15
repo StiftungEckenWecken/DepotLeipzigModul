@@ -185,13 +185,15 @@ function depot_user_auth_confirm($uid){
   $user = user_load($uid);
   $to = $user->mail;
 
-  drupal_set_message('Depot: Versuche nun, Rolle zuzuteilen. Kommt es zu einer Fehlermeldung, wurde möglicherweise der Link doppelt angeklickt.');
+  drupal_set_message('Depot: Versuche nun, Rolle zuzuteilen. Kommt es zu einer Fehlermeldung, wurde möglicherweise der Link doppelt angeklickt womit der Benutzer bereits die neue Rolle zugeteilt bekommen hat!');
 
+  // Try {
   db_query('INSERT INTO {users_roles} (uid, rid) VALUES (:uid, :rid)', array(':uid' => $uid, ':rid' => ROLE_ORGANISATION_AUTH));
- 
+  // catch: drupal_set_message('Bereits eingetragen')
+
   $mail_body = "Lieber Depot-Nutzer,\r\n\r\n";
-  $mail_body .= "Dein Antrag auf Gemeinwohlanerkennung wurde bestätigt. Du kannst nun spezielle Ressourcen zu besonderen Preisen ausleihen.\r\n";
-  $mail_body .= "Lieben Gruß, Dein Depot Team";
+  $mail_body .= "Dein Antrag auf Gemeinwohl-Anerkennung wurde bestätigt. Deine Organisation kann nun Ressourcen zu besonderen Preisen ausleihen.\r\n\r\n";
+  $mail_body .= "Viele Grüße,\r\n Dein Team von Depot Leipzig";
   $params = array(
     'body' => $mail_body,
     'subject' => t('Depot Leipzig: Antrag auf Gemeinnützigkeit bestätigt'),
@@ -459,8 +461,8 @@ function depot_buchung_delete($booking_id){
    $booking->delete();
 
    $mail_body = "Lieber Nutzer des Depot Leipzig,\r\n\r\n";
-   $mail_body .= "hiermit bestätigen wir, dass Deine Leihanfrage vom ".$created->format('d.m.Y')." (#".$booking->booking_id.") storniert und alle damit verbundenen Reservierungen aus unserem System entfernt wurden.\r\n\r\n";
-   $mail_body .= "Vielen Dank und bis bald, Dein Team vom Depot Leipzig";
+   $mail_body .= "hiermit bestätigen wir, dass Deine Leihanfrage vom ".$created->format('d.m.Y')." (ID ".$booking->booking_id.") storniert und alle damit verbundenen Reservierungen aus unserem System entfernt wurden.\r\n\r\n";
+   $mail_body .= "Viele Grüße,\r\n Dein Team vom Depot Leipzig";
 
    $params = array(
      'body' => $mail_body,
@@ -518,6 +520,7 @@ function depot_buchung_change_status($booking_id){
     $mail_body .= "Bitte stelle unbedingt sicher, dass Du am Abhol-/Bereitstellungsort der Ressource pünktlich eintriffst, denn dem Anbieter der Ressource wird das Teilen nur Spaß machen, wenn er nicht unnötig auf Nutzer seiner Ressource warten muss. Sollte Dir etwas dazwischen kommen und Du kannst deshalb nicht pünktlich erscheinen, informiere den Ansprechpartner am Abhol-/Bereitstellungsort bitte so früh wie möglich über die angegebene Telefonnummer (". $anbieter->field_telefonnummer['und'][0]['value'] .") bzw. via Mail (". $anbieter->mail .").\r\n\r\n";
 
     $mail_body .= "Bei weiteren Fragen kontaktiere bitte direkt den Anbieter. Sollte beim Buchungsprozess etwas nicht wie gewüncht funktioniert haben, teile uns dies bitte unter ".$base_url."/contact mit.\r\n\r\n";
+    $mail_body .= "Wir hoffen, Dir gefällt das depot und das Teilen von Ressourcen klappt wie erwartet. Hast Du vielleicht selbst Ressourcen, die Du gerne mit anderen teilen möchtest? Dann würde es uns freuen, wenn Du sie unter https://depot-leipzig.de/ressourcen/neu in depot-leipzig.de einstellen würdest.\r\n\r\n";
     $mail_body .= "Vielen Dank und bis bald, Dein Team vom Depot Leipzig";
 
     $params = array(
@@ -556,7 +559,7 @@ function depot_buchung_verleihvertrag($booking_id){
   
   if (isset($ressource['field_verleihvertrag_']['und'][0]['value'])){
     $booking_header = depot_buchung_form($booking_id, true)['buchung_header']['#markup'];
-    str_replace('Ihre Reservierung','',$booking_header);
+    $booking_header = str_replace('<div class="medium-12 column"><h5 class="left">Ihre Reservierung</h5><hr /></div>','',$booking_header);
     include_once(path_to_theme().'/templates/verleihvertrag.tpl.php');
     return pdf_using_mpdf_api($html);
   } else if ($anbieter->uid != $user->uid && $ausleiher->uid != $user->uid) {
@@ -638,12 +641,30 @@ function _buchungen_neu_redirect() {
 
 /**
  * Implements hook_preprocess_views_view_table
- * Disable table header for "Neueste Ressourcen" block
  */
 function depot_preprocess_views_view_table(&$vars) {
+
+  switch ($vars['view']->name){
+
+    case 'reservierungen_meine_reservierungen' :
+    case 'reservierungen_anfragen' :
+
+      // @TODO Give outdated reservations an opacity-class
+      /*print_r($vars);
+      exit();
+
+      foreach($vars['result']){
+        //
+      }
+
+      */
+    break;
   
-  if ($vars['view']->name == 'neueste_ressourcen') {
-    $vars['header'] = array();
+    case 'neueste_ressourcen' :
+      // Useless as the regarding block has been disabled
+      $vars['header'] = array();
+    break;
+
   }
   
 }
@@ -657,6 +678,16 @@ function depot_preprocess_views_view_table(&$vars) {
 function depot_form_alter(&$form, &$form_state, $form_id) {
 
   switch ($form_id){
+
+    case 'user_profile_form':
+    case 'user_pass':
+
+      if (isset($form['contact'])){
+        $form['contact']['contact']['#description'] = strip_tags($form['contact']['contact']['#description']);
+      }
+      unset($form['field_organisation_nachweis']);
+
+    break;
     
     case 'views_exposed_form':
     
@@ -671,7 +702,7 @@ function depot_form_alter(&$form, &$form_state, $form_id) {
       $form['kategorie_id']['#default_value'] = 'All';
       $form['kategorie_id']['#required'] = FALSE;
       $form['kategorie_id']['#options'] = depot_get_kategorien(true);
-    
+      
     break;
     
   }
@@ -702,7 +733,7 @@ function depot_user_view($account, $view_mode) {
   } else {
     $text = '<p>'.t('<strong>Status der Gemeinwohlanerkennung: <span style="color:red;">Inaktiv</span></strong></p><hr />').'</p>';
   }
-  
+
   unset($account->content['field_organisation_nachweis']);
   $account->content['field_is_organisation'] = array(
       '#type' => 'user_profile_item',
@@ -768,6 +799,7 @@ function depot_get_bezirke($format = false){
     foreach (bat_event_get_states('depot_bezirk') as $state_id => $state){
       $result[$state_id] = $state['label'];
     }
+    natcasesort($result);
     return $result;
   }
   return bat_event_get_states('depot_bezirk');
@@ -786,6 +818,7 @@ function depot_get_kategorien($format = false){
     foreach (bat_event_get_states('depot_kategorie') as $state_id => $state){
       $result[$state_id] = $state['label'];
     }
+    natcasesort($result);
     return $result;
   }
   return bat_event_get_states('depot_kategorie');
@@ -928,11 +961,14 @@ function depot_upload_file() {
 
   if ($wrapper = file_stream_wrapper_get_instance_by_uri('public://')) {
 
+    $newFileName = preg_replace('/\s+/', '_',basename($_FILES['anhang']['name']));
+    $newFileName = htmlentities(stripslashes($newFileName));
+ 
     $uploaddir = $wrapper->realpath();
-    $uploadFile = $uploaddir . '/' . basename($_FILES['anhang']['name']);
+    $uploadFile = $uploaddir . '/' . $newFileName;
 
     if (move_uploaded_file($_FILES['anhang']['tmp_name'], $uploadFile)) {
-      return $base_url . '/sites/default/files/' . basename($_FILES['anhang']['name']);
+      return $base_url . '/sites/default/files/' . $newFileName;
     } else {
       return false;
     }
@@ -945,6 +981,9 @@ function humanize_price(&$price){
     $price = null;
     return;
   }
+
+  $price = str_replace('€','',$price);
+  $price = str_replace(',','.',$price);
 
   $formatter = new NumberFormatter('de_DE', NumberFormatter::CURRENCY);
   $price = $formatter->formatCurrency($price, 'EUR');
