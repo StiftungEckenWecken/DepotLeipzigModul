@@ -1,17 +1,17 @@
 <?php
 
 function replace_euro($price){
-  return str_replace('€','',$price);
+  return str_replace(',','.',str_replace('€','',$price));
 }
 
 function depot_calc_price($ressource, $params, $total_time){
   
     $preis = array();
-    $preis['res_preis'] = (isset($ressource['field_gemeinwohl']['und'][0]['value']) && $ressource['field_gemeinwohl']['und'][0]['value']) ? replace_euro($ressource['field_kosten_2']['und'][0]['value']) : replace_euro($ressource['field_kosten']['und'][0]['value']);
-    $preis['res_kaution'] = (isset($ressource['field_kaution']['und'][0]['value'])) ? replace_euro($ressource['field_kaution']['und'][0]['value']) : 0;
-    $preis['res_takt'] = replace_euro($ressource['field_abrechnungstakt']['und'][0]['value']);
-    $preis['res_tax'] = (isset($ressource['field_mwst']['und'])) ? replace_euro($ressource['field_mwst']['und'][0]['value']) : 0;
-  
+    $preis['res_preis'] = (float)(isset($ressource['field_gemeinwohl']['und'][0]['value']) && $ressource['field_gemeinwohl']['und'][0]['value']) ? replace_euro($ressource['field_kosten_2']['und'][0]['value']) : replace_euro($ressource['field_kosten']['und'][0]['value']);
+    $preis['res_kaution'] = (float)(isset($ressource['field_kaution']['und'][0]['value'])) ? replace_euro($ressource['field_kaution']['und'][0]['value']) : 0;
+    $preis['res_takt'] = $ressource['field_abrechnungstakt']['und'][0]['value'];
+    $preis['res_tax'] = (int)(isset($ressource['field_mwst']['und'])) ? replace_euro($ressource['field_mwst']['und'][0]['value']) : 0;
+
     $preis['preis_plain'] = 0;
     $preis['preis_tax'] = 0;
     $preis['preis_kaution'] = 0;
@@ -31,7 +31,15 @@ function depot_calc_price($ressource, $params, $total_time){
     }
   
     $preis['preis_total'] += $preis['preis_kaution'];
-    
+
+    humanize_price($preis['res_preis']);
+    humanize_price($preis['res_kaution']);
+    humanize_price($preis['res_tax']);
+    humanize_price($preis['preis_total']);
+    humanize_price($preis['preis_plain']);
+    humanize_price($preis['preis_tax']);
+    humanize_price($preis['preis_kaution']);
+
     return $preis;
     
 }
@@ -187,19 +195,19 @@ function depot_booking_edit_form($form, &$form_state, $booking) {
     </div>';
 
   $price_card_tooltip = '
-    <p>'.t('Preis pro Einheit / Tag').': '. $preis['res_preis'] . '€</p>' 
-    .($preis['res_kaution'] > 0 ? '<p>'.t('Kaution pro Einheit').': '. $preis['res_kaution'].'€</p>' : '')
+    <p>'.t('Preis pro Einheit / Tag').': '. $preis['res_preis'] . '</p>' 
+    .($preis['res_kaution'] > 0 ? '<p>'.t('Kaution pro Einheit').': '. $preis['res_kaution'].'</p>' : '')
     . '<hr /><p>'.t('x Gewählte Einheiten') .': '. $params['einheiten'].'</p>'
     . '<p>'.t('x Zeitraum').': '.$total_time_readable.'</p>';
 
-  $price_col = '
+    $price_col = '
   <div class="medium-4 column aside-price">
     <h4><i class="fi fi-price-tag"></i>'. t('Preis').'</h4>
     <i class="fi fi-info has-tip" data-tooltip aria-haspopup="true" title="'.$price_card_tooltip.'"></i>
-     <p><strong>'. t('Netto') .'</strong>: '. $preis['preis_plain'] .'€</p>
-     '. ($preis['preis_tax'] > 0 ? '<p><strong>'.t('MwSt').':</strong> '. $preis['preis_tax'] .'€</p>' : '') .'
-     '. ($preis['preis_kaution'] > 0 ? '<p><strong>'.t('Kaution').':</strong> '.$preis['preis_kaution'].'€</p>' : '') .'      
-     <hr /><p><strong>'. t('Gesamt') .'</strong>: '. $preis['preis_total'] .'€</p>
+     <p><strong>'. t('Netto') .'</strong>: '. $preis['preis_plain'] .'</p>
+     '. ($preis['preis_tax'] > 0 ? '<p><strong>'.t('MwSt').' ('. $ressource['field_mwst']['und'][0]['value'] .'%):</strong> '. $preis['preis_tax'] .'</p>' : '') .'
+     '. ($preis['preis_kaution'] > 0 ? '<p><strong>'.t('Kaution').':</strong> '.$preis['preis_kaution'].'</p>' : '') .'      
+     <hr /><p><strong>'. t('Gesamt') .'</strong>: '. $preis['preis_total'] .'</p>
     </div>';
   
   $status_col = null;
@@ -210,9 +218,8 @@ function depot_booking_edit_form($form, &$form_state, $booking) {
     } else {
       $status_col = '<div id="booking-status" class="genehmigt"><i class="fi fi-checkbox"></i> '.t('Buchungsstatus').': <strong>'.t('Akzeptiert').'</strong></div>';      
     }
-    if ($user_is_anbieter){
-      // Outlined because we do not want the user to de-activate activated reservations yet
-      //$status_col .= '<a href="/reservierungen/'.$booking->booking_id.'/change_status" class="right" style="padding-right:10px;">'.t('Status ändern').'</a>';
+    if ($user_is_anbieter && !$booking->field_genehmigt['und'][0]['value']){
+      $status_col .= '<a href="/reservierungen/'.$booking->booking_id.'/change_status" class="right" style="padding-right:10px;"><i class="fi fi-check"></i> '.t('Buchung akzeptieren').'</a>';
     }
     if ($booking->field_genehmigt['und'][0]['value'] && isset($ressource['field_verleihvertrag_']['und'][0]['value']) && $ressource['field_verleihvertrag_']['und'][0]['value']){
       $status_col .= '<a href="/reservierungen/'.$booking->booking_id.'/verleihvertrag" class="right" style="padding-right:10px;">'.t('Verleihvertrag').'</a>';      

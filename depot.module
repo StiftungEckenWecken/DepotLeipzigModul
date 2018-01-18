@@ -556,7 +556,7 @@ function depot_buchung_verleihvertrag($booking_id){
   $anbieter = user_load($booking->field_verleiher['und'][0]['value']);
   $ausleiher = user_load($booking->field_ausleiher['und'][0]['value']);
   $ressource = get_object_vars(bat_type_load($booking->field_ressource_id['und'][0]['value']));
-  
+
   if (isset($ressource['field_verleihvertrag_']['und'][0]['value'])){
     $booking_header = depot_buchung_form($booking_id, true)['buchung_header']['#markup'];
     $booking_header = str_replace('<div class="medium-12 column"><h5 class="left">Ihre Reservierung</h5><hr /></div>','',$booking_header);
