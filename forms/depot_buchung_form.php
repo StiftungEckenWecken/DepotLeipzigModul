@@ -129,9 +129,10 @@ function depot_booking_edit_form($form, &$form_state, $booking) {
     $total_time_readable = $total_time . ' ' . ($total_time == 1 ? t('Tag') : t('Tage'));
   } else {
     // hourly
-    $total_time = $begin->diff($end)->format('%H:%I');   
+    $total_time = $begin->diff($end)->format('%H:%I');
+    $total_time_readable = $total_time . ' ' . t('Stunden');
   }
-
+  
   if (!$edit_mode){
 
     if ($begin->format('Ymd') < date('Ymd')){
@@ -249,7 +250,6 @@ function depot_booking_edit_form($form, &$form_state, $booking) {
       field_attach_form('bat_booking', $booking, $form, $form_state, isset($booking->language) ? $booking->language : NULL, array('field_name' => 'field_ausleiher_name'));  
       field_attach_form('bat_booking', $booking, $form, $form_state, isset($booking->language) ? $booking->language : NULL, array('field_name' => 'field_ausleiher_telefonnummer'));  
       field_attach_form('bat_booking', $booking, $form, $form_state, isset($booking->language) ? $booking->language : NULL, array('field_name' => 'field_ausleiher_email'));  
-      
       $form['field_geplante_nutzung']['#disabled'] = TRUE;
       $form['field_nachricht_an_den_anbieter']['#disabled'] = TRUE;
       $form['field_ausleiher_name']['#disabled'] = TRUE;
@@ -258,7 +258,6 @@ function depot_booking_edit_form($form, &$form_state, $booking) {
       $form['field_ausleiher_name']['#attributes']['class'] = array('medium-4 column');
       $form['field_ausleiher_telefonnummer']['#attributes']['class'] = array('medium-4 column');
       $form['field_ausleiher_email']['#attributes']['class'] = array('medium-4 column');
-      
       $form['actions'] = array(
         '#type' => 'actions',
         '#tree' => FALSE,
@@ -282,7 +281,7 @@ function depot_booking_edit_form($form, &$form_state, $booking) {
   );
 
   field_attach_form('bat_booking', $booking, $form, $form_state, isset($booking->language) ? $booking->language : NULL);  
-  
+
   if ($edit_mode){
     $form['field_geplante_nutzung']['#disabled'] = TRUE;      
     $form['field_nachricht_an_den_anbieter']['#disabled'] = TRUE;
@@ -291,6 +290,7 @@ function depot_booking_edit_form($form, &$form_state, $booking) {
     $form['field_ausleiher_telefonnummer']['#disabled'] = TRUE;
     $form['field_ausleiher_email']['#disabled'] = TRUE;
   } else {
+    $form['field_laenge']['und'][0]['value']['#default_value'] = $total_time_readable;
     if (isset($user->field_vorname['und'][0]['value'])){
       $form['field_ausleiher_name']['und'][0]['value']['#default_value'] = $user->field_vorname['und'][0]['value'];
     }
@@ -413,6 +413,7 @@ function depot_booking_edit_form($form, &$form_state, $booking) {
   $form['field_buchung_bedingungen']['#attributes']['class'] = array('column');
   $form['field_genehmigt']['#attributes']['class'] = array('column');
   $form['field_genehmigt']['#access'] = (user_has_role(ROLE_ADMINISTRATOR));
+  $form['field_laenge']['#access'] = FALSE;
 
   // Meta's...
   $form['field_ausleiher']['#access'] = FALSE;
@@ -501,7 +502,7 @@ function depot_booking_edit_form_submit(&$form, &$form_state) {
   }
 
   $begin = $form['booking_start_date']['und'][0]['#default_value']['value'];
-  $end   =  $form['booking_end_date']['und'][0]['#default_value']['value'];
+  $end   = $form['booking_end_date']['und'][0]['#default_value']['value'];
 
   if ($isNewBooking){
 
@@ -556,7 +557,10 @@ function depot_booking_edit_form_submit(&$form, &$form_state) {
     } else {
       // hourly
       $total_time = $begin_dt->diff($end_dt)->format('%H:%I');   
+      $total_time_readable = $total_time . ' ' . t('Stunden');
     }
+
+    $booking->field_laenge['und'][0]['value']['#default_value'] = $total_time_readable;
 
     // Eventually, units and date changed -> recalc price
     // TODO: Change after anti-over-booking-feature has been implemented
