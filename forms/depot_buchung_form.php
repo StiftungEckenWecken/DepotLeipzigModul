@@ -93,17 +93,25 @@ function depot_booking_edit_form($form, &$form_state, $booking) {
     
   } else {
 
-    __depot_booking_edit_form_set_params($params);
-    $begin = (new DateTime())->setTimestamp($params['begin']);
-    $end = (new DateTime())->setTimestamp($params['end']);
+    // Stick with BAT's required granularity
+    // (minutes rounded to quarter steps)
+    $round = 15*60;
 
+    __depot_booking_edit_form_set_params($params);
+    
+    $begin = (new DateTime())->setTimestamp($params['begin']);
+    $begin_formatted_hour = date('H',round(strtotime($begin->format('H:i')) / $round) * $round);
+    $begin_formatted_min  = date('i',round(strtotime($begin->format('H:i')) / $round) * $round);
+    $begin->setTime($begin_formatted_hour, $begin_formatted_min);
+
+    $end = (new DateTime())->setTimestamp($params['end']);
+    $end_formatted_hour = date('H',round(strtotime($begin->format('H:i')) / $round) * $round);
+    $end_formatted_min  = date('i',round(strtotime($begin->format('H:i')) / $round) * $round);
+    $end->setTime($end_formatted_hour, $end_formatted_min);
+    
   }
 
-  $begin_bat = date_format($begin, 'Y-m-d H:i');
-  $end_bat = date_format($end, 'Y-m-d H:i');
-
   // 2. Manually check again for availability of resources
-
   $begin_bat = date_format($begin, 'Y-m-d H:i');
   $end_bat = date_format($end, 'Y-m-d H:i');
 
@@ -501,8 +509,8 @@ function depot_booking_edit_form_submit(&$form, &$form_state) {
     }
   }
 
-  $begin = $form['booking_start_date']['und'][0]['#default_value']['value'];
-  $end   = $form['booking_end_date']['und'][0]['#default_value']['value'];
+  $begin = $booking->booking_start_date['und'][0]['value'];
+  $end   = $booking->booking_end_date['und'][0]['value'];
 
   if ($isNewBooking){
 
@@ -547,7 +555,7 @@ function depot_booking_edit_form_submit(&$form, &$form_state) {
     if ($ressource['field_abrechnungstakt']['und'][0]['value'] == 0){
       // granularity: daily
       $total_time = $begin_dt->diff($end_dt)->format('%a');
-      if ($begin_dt->format('Hi') > $end_dt->format('Hi')){
+      if ($begin_dt->format('Hi') < $end_dt->format('Hi')){
         $total_time++;
       }
       if ($total_time == 0){
@@ -560,7 +568,7 @@ function depot_booking_edit_form_submit(&$form, &$form_state) {
       $total_time_readable = $total_time . ' ' . t('Stunden');
     }
 
-    $booking->field_laenge['und'][0]['value']['#default_value'] = $total_time_readable;
+    $booking->field_laenge['und'][0]['value'] = $total_time_readable;
 
     // Eventually, units and date changed -> recalc price
     // TODO: Change after anti-over-booking-feature has been implemented
