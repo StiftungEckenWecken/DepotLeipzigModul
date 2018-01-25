@@ -1,0 +1,167 @@
+{
+  "type" : "depot_bezirk",
+  "label" : "Depot Bezirk",
+  "event_granularity" : "bat_daily",
+  "fixed_event_states" : "1",
+  "weight" : "0",
+  "default_event_value_field_ids" : null,
+  "default_event_label_field_name" : null,
+  "data" : "",
+  "target_entity_type" : "bat_unit",
+  "rdf_mapping" : [],
+  "event_states" : [
+    {
+      "machine_name" : "plagwitz",
+      "label" : "Plagwitz",
+      "color" : "#ce6e6e",
+      "calendar_label" : "Plagwitz",
+      "locked" : "0",
+      "blocking" : "0",
+      "default_state" : "0"
+    },
+    {
+      "machine_name" : "sch_nefeld",
+      "label" : "Sch\u00f6nefeld",
+      "color" : "#e03f3f",
+      "calendar_label" : "Sch\u00f6nefeld",
+      "locked" : "0",
+      "blocking" : "0",
+      "default_state" : "0"
+    },
+    {
+      "machine_name" : "schleu_ig",
+      "label" : "Schleu\u00dfig",
+      "color" : "#f4dfdf",
+      "calendar_label" : "Schleu\u00dfig",
+      "locked" : "0",
+      "blocking" : "0",
+      "default_state" : "0"
+    },
+    {
+      "machine_name" : "zentrum",
+      "label" : "Zentrum",
+      "color" : "#e67c7c",
+      "calendar_label" : "Zentrum",
+      "locked" : "0",
+      "blocking" : "0",
+      "default_state" : "0"
+    },
+    {
+      "machine_name" : "volkmarsdorf",
+      "label" : "Volkmarsdorf",
+      "color" : "#bfbdbd",
+      "calendar_label" : "Volkmarsdorf",
+      "locked" : "0",
+      "blocking" : "0",
+      "default_state" : "0"
+    },
+    {
+      "machine_name" : "neustadt_neusch_nefeld",
+      "label" : "Neustadt-Neusch\u00f6nefeld",
+      "color" : "#c7baba",
+      "calendar_label" : "Neustadt-Neusch\u00f6nefeld",
+      "locked" : "0",
+      "blocking" : "0",
+      "default_state" : "0"
+    },
+    {
+      "machine_name" : "reudnitz_thonberg",
+      "label" : "Reudnitz - Thonberg",
+      "color" : "#ae1b1b",
+      "calendar_label" : "Reudnitz - Thonberg",
+      "locked" : "0",
+      "blocking" : "0",
+      "default_state" : "0"
+    },
+    {
+      "machine_name" : "mockau",
+      "label" : "Mockau",
+      "color" : "#f4efef",
+      "calendar_label" : "Mockau",
+      "locked" : "0",
+      "blocking" : "0",
+      "default_state" : "0"
+    },
+    {
+      "machine_name" : "gohlis",
+      "label" : "Gohlis",
+      "color" : "#e39999",
+      "calendar_label" : "Gohlis",
+      "locked" : "0",
+      "blocking" : "0",
+      "default_state" : "0"
+    },
+    {
+      "machine_name" : "s_dvorstadt",
+      "label" : "S\u00fcdvorstadt",
+      "color" : "#f3e9e9",
+      "calendar_label" : "S\u00fcdvorstadt",
+      "locked" : "0",
+      "blocking" : "0",
+      "default_state" : "0"
+    },
+    {
+      "machine_name" : "connewitz",
+      "label" : "Connewitz",
+      "color" : "#a13535",
+      "calendar_label" : "Connewitz",
+      "locked" : "0",
+      "blocking" : "0",
+      "default_state" : "0"
+    },
+    {
+      "machine_name" : "kleinzschocher",
+      "label" : "Kleinzschocher",
+      "color" : "#7e1f1f",
+      "calendar_label" : "Kleinzschocher",
+      "locked" : "0",
+      "blocking" : "0",
+      "default_state" : "0"
+    },
+    {
+      "machine_name" : "gr_nau",
+      "label" : "Gr\u00fcnau",
+      "color" : "#ba9090",
+      "calendar_label" : "Gr\u00fcnau",
+      "locked" : "0",
+      "blocking" : "0",
+      "default_state" : "0"
+    },
+    {
+      "machine_name" : "st_tteritz",
+      "label" : "St\u00f6tteritz",
+      "color" : "#ccbaba",
+      "calendar_label" : "St\u00f6tteritz",
+      "locked" : "0",
+      "blocking" : "0",
+      "default_state" : "0"
+    },
+    {
+      "machine_name" : "lindenau",
+      "label" : "Lindenau",
+      "color" : "#9d3f3f",
+      "calendar_label" : "Lindenau",
+      "locked" : "0",
+      "blocking" : "0",
+      "default_state" : "0"
+    },
+    {
+      "machine_name" : "leipziger_umland",
+      "label" : "Leipziger Umland",
+      "color" : "#d44646",
+      "calendar_label" : "Leipziger Umland",
+      "locked" : "0",
+      "blocking" : "0",
+      "default_state" : "0"
+    },
+    {
+      "machine_name" : "sonstige_",
+      "label" : "Sonstige",
+      "color" : "#6e6d6d",
+      "calendar_label" : "Sonstige",
+      "locked" : "0",
+      "blocking" : "0",
+      "default_state" : "0"
+    }
+  ]
+}
