@@ -4,10 +4,15 @@ function replace_euro($price){
   return str_replace(',','.',str_replace('€','',$price));
 }
 
-function depot_calc_price($ressource, $params, $total_time){
-  
+function depot_calc_price ($ressource, $params, $total_time) {
+
     $preis = array();
-    $preis['res_preis'] = (float)(isset($ressource['field_gemeinwohl']['und'][0]['value']) && $ressource['field_gemeinwohl']['und'][0]['value']) ? replace_euro($ressource['field_kosten_2']['und'][0]['value']) : replace_euro($ressource['field_kosten']['und'][0]['value']);
+    $preis['res_preis'] = (float)replace_euro($ressource['field_kosten']['und'][0]['value']);
+
+    if (user_has_role(ROLE_ORGANISATION_AUTH) && !empty($ressource['field_kosten_2']['und'][0]['value'])) {
+      $preis['res_preis'] = (float)replace_euro($ressource['field_kosten_2']['und'][0]['value']);
+    }
+
     $preis['res_kaution'] = (float)(isset($ressource['field_kaution']['und'][0]['value'])) ? replace_euro($ressource['field_kaution']['und'][0]['value']) : 0;
     $preis['res_takt'] = $ressource['field_abrechnungstakt']['und'][0]['value'];
     $preis['res_tax'] = (int)(isset($ressource['field_mwst']['und'])) ? replace_euro($ressource['field_mwst']['und'][0]['value']) : 0;
@@ -17,13 +22,13 @@ function depot_calc_price($ressource, $params, $total_time){
     $preis['preis_kaution'] = 0;
     $preis['preis_total'] = 0;
   
-    if ($preis['res_kaution'] > 0){
+    if ($preis['res_kaution'] > 0) {
       $preis['preis_kaution'] = $preis['res_kaution'] * $params['einheiten'];
     }
   
     $preis['preis_plain'] = $preis['res_preis'] * $total_time * $params['einheiten'];
   
-    if ($preis['res_tax'] > 0){
+    if ($preis['res_tax'] > 0) {
       $preis['preis_tax'] = $preis['preis_plain'] * $preis['res_tax'] / 100;
       $preis['preis_total'] = $preis['preis_plain'] + $preis['preis_tax'];
     } else {
@@ -46,7 +51,7 @@ function depot_calc_price($ressource, $params, $total_time){
 
 function __depot_booking_edit_form_set_params(&$params, $booking = null){
 
-  if (isset($booking) && !empty($booking)){
+  if (isset($booking) && !empty($booking)) {
     $params = array(
       'rid' => $booking->field_ressource_id['und'][0]['value'],
       'begin' => $booking->booking_start_date['und'][0]['value'],
@@ -99,14 +104,20 @@ function depot_booking_edit_form($form, &$form_state, $booking) {
 
     __depot_booking_edit_form_set_params($params);
     
+    // We expect that user's timezone is same as server
+    // refactor if multiple timezones are required
     $begin = (new DateTime())->setTimestamp($params['begin']);
+    $begin->setTimezone(new DateTimeZone('UTC'));
+    $begin->add(new DateInterval('PT1H'));
     $begin_formatted_hour = date('H',round(strtotime($begin->format('H:i')) / $round) * $round);
     $begin_formatted_min  = date('i',round(strtotime($begin->format('H:i')) / $round) * $round);
     $begin->setTime($begin_formatted_hour, $begin_formatted_min);
 
     $end = (new DateTime())->setTimestamp($params['end']);
-    $end_formatted_hour = date('H',round(strtotime($begin->format('H:i')) / $round) * $round);
-    $end_formatted_min  = date('i',round(strtotime($begin->format('H:i')) / $round) * $round);
+    $end->setTimezone(new DateTimeZone('UTC'));
+    $end->add(new DateInterval('PT1H'));
+    $end_formatted_hour = date('H',round(strtotime($end->format('H:i')) / $round) * $round);
+    $end_formatted_min  = date('i',round(strtotime($end->format('H:i')) / $round) * $round);
     $end->setTime($end_formatted_hour, $end_formatted_min);
     
   }
@@ -125,7 +136,7 @@ function depot_booking_edit_form($form, &$form_state, $booking) {
   $allow_change = (user_has_role(ROLE_ADMINISTRATOR) || $edit_mode);  
 
   // Changes have to be appended further down (submit-edit-action)
-  if ($ressource['field_abrechnungstakt']['und'][0]['value'] == 0){
+  if ($ressource['field_abrechnungstakt']['und'][0]['value'] == 0) {
     // granularity: daily
     $total_time = $begin->diff($end)->format('%a');
     if ($begin->format('Hi') < $end->format('Hi')){
@@ -136,7 +147,7 @@ function depot_booking_edit_form($form, &$form_state, $booking) {
     }
     $total_time_readable = $total_time . ' ' . ($total_time == 1 ? t('Tag') : t('Tage'));
   } else {
-    // hourly
+    // granularity: hourly
     $total_time = $begin->diff($end)->format('%H:%I');
     $total_time_readable = $total_time . ' ' . t('Stunden');
   }
@@ -425,7 +436,10 @@ function depot_booking_edit_form($form, &$form_state, $booking) {
 
   // Meta's...
   $form['field_ausleiher']['#access'] = FALSE;
-  $form['field_ausleiher']['und'][0]['value']['#default_value'] = $user->uid;
+  if ($form['field_ausleiher']['und'][0]['value']['#default_value'] == '') {
+    // Only allow setting ausleiher once
+    $form['field_ausleiher']['und'][0]['value']['#default_value'] = $user->uid;
+  }
   $form['field_verleiher']['#access'] = FALSE;
   $form['field_verleiher']['und'][0]['value']['#default_value'] = $anbieter->uid;
   $form['field_name_ressource']['#access'] = false;

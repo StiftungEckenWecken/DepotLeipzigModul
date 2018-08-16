@@ -126,7 +126,7 @@ function depot_user_organisation_request_form($form, &$form_state) {
   global $user;
 
   $intro_text = '<hr /><h3>'.t('Als Gemeinwohl-Organisation anerkennen lassen').'</h3>';
-  $intro_text .= '<p>'.t('Hier kannst Du die Organisation für die Du handelst als Gemeinwohl-Organisation anerkennen lassen, um günstiger Ressourcen ausleihen zu können. Erläuterungen dazu siehe <a href="/faq">hier</a>. Wenn Deine Organisation keinen Freistellungsbescheid hat, stelle bitte kurz dar, wie Deine Organisation das Gemeinwohl stärkt.').'</p>';
+  $intro_text .= '<p>'.t('Hier kannst Du die Organisation für die Du handelst als Gemeinwohl-Organisation anerkennen lassen, um günstiger Ressourcen ausleihen zu können. Erläuterungen dazu siehe <a href="https://depot-leipzig.de/so-funktionierts#gemeinwohl_beantragen" target="_blank">hier</a>. Wenn Deine Organisation keinen Freistellungsbescheid hat, stelle bitte kurz dar, wie Deine Organisation das Gemeinwohl stärkt.').'</p>';
   $intro_text .= '<p>'.t('<strong>Aktueller Status der Gemeinwohlanerkennung: <span style="color:red;">Inaktiv</span></strong></p><hr />').'</p>';
 
   $form['#attributes']['enctype'] = "multipart/form-data";
@@ -203,7 +203,7 @@ function depot_user_organisation_request_form_validate(&$form, &$form_state) {
 function depot_user_organisation_request_form_submit(&$form, &$form_state) {
 
   global $user;
-  $user = user_load($user);
+  $user = user_load($user->uid);
   global $base_url;
 
   $anhang_path = null;

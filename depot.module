@@ -1,7 +1,5 @@
 <?php
 
-//use Roomify\Bat\Event\Event;
-
 define('ROLE_ADMINISTRATOR', 3); // = 'Administrator'
 define('ROLE_ORGANISATION', 5); // = 'Organisation'
 define('ROLE_ORGANISATION_AUTH', 4); // = 'Authentifizierte Organisation'
@@ -382,7 +380,7 @@ function depot_add_units($type_id, $units_name, $total_units, $id_name_starter =
 /** 
  * Called by path user/%/organisation
  */
-function depot_build_user_edit_organisation_form(){
+function depot_build_user_edit_organisation_form() {
 
   include_once('forms/depot_user_organisation_form.php');
 
@@ -401,7 +399,7 @@ function depot_build_user_edit_organisation_form(){
  * Called by path reservierungen/%id
  * Only show booking details & state
  */
-function depot_buchung_detail($booking_id){
+function depot_buchung_detail($booking_id) {
 
   return depot_buchung_form($booking_id);
 
@@ -467,12 +465,11 @@ function depot_buchung_delete($booking_id){
    $params = array(
      'body' => $mail_body,
      'subject' => t('Depot Leipzig: Stornierung Deiner Leihanfrage'),
-     'headers' => array(
-       'Cc' => user_load($anbieter)->mail
-     )
    );
+
   
    drupal_mail('depot','depot_buchung_delete_form', user_load($ausleiher)->mail,'de', $params);
+   drupal_mail('depot','depot_buchung_delete_form', user_load($anbieter)->mail,'de', $params);
 
    drupal_set_message(t('Die Reservierung wurde erfolgreich storniert und Ver- bzw. Entleiher informiert.'));
    drupal_goto('ressourcen');
@@ -534,10 +531,12 @@ function depot_buchung_change_status($booking_id){
     drupal_mail('depot','depot_buchung_form', user_load($booking->field_ausleiher['und'][0]['value'])->mail,'de', $params);
 
     drupal_set_message(t('Die Reservierung wurde genehmigt und der Interessent benachrichtigt!'));
+    
     if (isset($ressource['field_verleihvertrag_']['und'][0]['value']) && $ressource['field_verleihvertrag_']['und'][0]['value']){
       drupal_set_message('Zudem wurde ein Leihvertrag erstellt welcher der Reservierung beiliegt.');
     }
-    drupal_goto('mein-depot/reservierungen');
+
+    drupal_goto('mein-depot/reservierungen/' . $booking_id);
 
   } else {
     $newStatus = ($booking->field_genehmigt['und'][0]['value'] == 0) ? t('akzeptiert') : t('abgewiesen');
@@ -865,6 +864,8 @@ function depot_events_bulk_action($action, $type_id, $total_units, $begin, $end,
   }
   
   $free_units = depot_get_available_units_by_rid($type_id, $begin, $end);
+
+  watchdog('depot', 'total_units: '.(count($free_units) < $total_units) ? count($free_units) : $total_units . '  free_units: '. var_dump($free_units));
 
   if ($action == 'add'){
 
