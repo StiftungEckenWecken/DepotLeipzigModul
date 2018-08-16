@@ -9,7 +9,7 @@ function depot_user_organisation_form($form, &$form_state) {
   $user = user_load($user->uid);
 
   $intro_text = '<h3>'.t('Als Organisation auftreten').'</h3>';
-  $intro_text .= '<p>'.t('Möchten Sie im Depot nicht als Einzelperson behandelt werden, können Sie dies hier tun.').'</p>';
+  $intro_text .= '<p>'.t('M&auml;chten Sie im Depot nicht als Einzelperson behandelt werden, k&auml;nnen Sie dies hier tun.').'</p>';
   $is_organisation = user_has_role(ROLE_ORGANISATION);
   $is_organisation_auth = user_has_role(ROLE_ORGANISATION_AUTH);  
 
@@ -114,7 +114,7 @@ function depot_user_organisation_form_submit(&$form, &$form_state) {
   // Finished, flush cash
   //cache_clear_all('menu:'. $user->uid, TRUE);
 
-  drupal_set_message(t('Ihr Profil wurde erfolgreich als Organisation aufgewertet. Sie können sich nun zusätzlich als Gemeinwohl-Organisation anerkennen lassen (s.u.).'));
+  drupal_set_message(t('Ihr Profil wurde erfolgreich als Organisation aufgewertet. Sie k&auml;nnen sich nun zus&auml;tzlich als Gemeinwohl-Organisation anerkennen lassen (s.u.).'));
 
 }
 
@@ -126,7 +126,7 @@ function depot_user_organisation_request_form($form, &$form_state) {
   global $user;
 
   $intro_text = '<hr /><h3>'.t('Als Gemeinwohl-Organisation anerkennen lassen').'</h3>';
-  $intro_text .= '<p>'.t('Hier kannst Du die Organisation für die Du handelst als Gemeinwohl-Organisation anerkennen lassen, um günstiger Ressourcen ausleihen zu können. Erläuterungen dazu siehe <a href="https://depot-leipzig.de/so-funktionierts#gemeinwohl_beantragen" target="_blank">hier</a>. Wenn Deine Organisation keinen Freistellungsbescheid hat, stelle bitte kurz dar, wie Deine Organisation das Gemeinwohl stärkt.').'</p>';
+  $intro_text .= '<p>'.t('Hier kannst Du die Organisation f&uuml;r die Du handelst als Gemeinwohl-Organisation anerkennen lassen, um g&uuml;nstiger Ressourcen ausleihen zu k&auml;nnen. Erl&auml;uterungen dazu siehe <a href="https://depot-leipzig.de/so-funktionierts#gemeinwohl_beantragen" target="_blank">hier</a>. Wenn Deine Organisation keinen Freistellungsbescheid hat, stelle bitte kurz dar, wie Deine Organisation das Gemeinwohl st&auml;rkt.').'</p>';
   $intro_text .= '<p>'.t('<strong>Aktueller Status der Gemeinwohlanerkennung: <span style="color:red;">Inaktiv</span></strong></p><hr />').'</p>';
 
   $form['#attributes']['enctype'] = "multipart/form-data";
@@ -137,8 +137,8 @@ function depot_user_organisation_request_form($form, &$form_state) {
   );
 
   $form['begruendung'] = array(
-    '#title' => t('Begründung'),
-    '#description' => t('Bitte ausfüllen, insb. wenn Freistellungsbescheid fehlt.'),
+    '#title' => t('Begr&uuml;ndung'),
+    '#description' => t('Bitte ausf&uuml;llen, insb. wenn Freistellungsbescheid fehlt.'),
     '#type' => 'textarea',
     '#required' => TRUE,
     '#cols' => 60, 
@@ -191,8 +191,8 @@ function depot_user_organisation_request_form_validate(&$form, &$form_state) {
     drupal_set_message('Hochladen nicht vergessen','alert');
    }*/ if (isset($_FILES['anhang']['name']) && !empty($_FILES['anhang']['name'])){
     if ($_FILES['anhang']['size'] > 3145728){
-      form_set_error('Die ausgewählte Datei ist zu groß');
-      drupal_set_message('Die ausgewählte Datei ist zu groß','alert'); 
+      form_set_error('Die ausgew&auml;hlte Datei ist zu gross');
+      drupal_set_message('Die ausgew&auml;hlte Datei ist zu gross','alert'); 
     }
   }
 }
@@ -229,7 +229,7 @@ function depot_user_organisation_request_form_submit(&$form, &$form_state) {
   }*/
 
   $mail_body = "Lieber Administrator,\r\n\r\n";
-  $mail_body .= "Der Nutzer ". $user->name ." hat für ".$user->field_organisation_name['und'][0]['value']." um Anerkennung auf Gemeinnützigkeit gebeten.\r\n\r\n";
+  $mail_body .= "Der Nutzer ". $user->name ." hat f&uuml;r ".$user->field_organisation_name['und'][0]['value']." um Anerkennung auf Gemeinn&uuml;tzigkeit gebeten.\r\n\r\n";
   $mail_body .= "Das Profil ist unter ".$base_url."/user/".$user->uid."/edit zu finden.\r\n\r\n";
   $mail_body .= "Als Bewilligungsgrund wurde folgender genannt: '".$form_state['values']['begruendung']."'\r\n\r\n";
 
@@ -245,20 +245,21 @@ function depot_user_organisation_request_form_submit(&$form, &$form_state) {
       ),
     )); 
 
-    $mail_body .= "Es wurde zudem ein Anhang unter ". $anhang_path ." hinterlegt und mit dem Nutzerprofil verknüpft\r\n\r\n";
+    $mail_body .= "Es wurde zudem ein Anhang unter ". $anhang_path ." hinterlegt und mit dem Nutzerprofil verkn&uuml;pft\r\n\r\n";
   }
 
   $mail_body .= "Um dem Antrag zu zustimmen, gehen Sie bitte in Ihrem Browser auf ". $base_url ."/depot/user_auth_confirm/".$user->uid;
 
   $params = array(
     'body' => $mail_body,
-    'subject' => t('Depot Leipzig: Antrag auf Gemeinnützigkeit'),
+    'subject' => t('Depot Leipzig: Antrag auf Gemeinn&uuml;tzigkeit'),
   );
 
   drupal_mail('depot','depot_apply_organisation_form',variable_get('site_mail', ''),'de',$params);
-  
+   
   // https://api.drupal.org/api/drupal/includes!mail.inc/function/drupal_mail/7.x
-  drupal_set_message(t('Vielen Dank, Ihr Antrag wird umgehend von unseren Administratoren geprüft.'));
+  drupal_set_message(t('Vielen Dank, Ihr Antrag wird umgehend von unseren Administratoren gepr&uuml;ft.'));
   
   $form_state['redirect'] = 'ressourcen/';
+
 }
