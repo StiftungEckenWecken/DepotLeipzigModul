@@ -1,6 +1,9 @@
 <?php
 
-//use Roomify\Bat\Event\Event;
+global $regionalpartner;
+
+include_once 'includes/uri.inc';
+include_once 'includes/geocoder.inc';
 
 define('ROLE_ADMINISTRATOR', 3); // = 'Administrator'
 define('ROLE_ORGANISATION', 5); // = 'Organisation'
@@ -10,7 +13,19 @@ define('ROLE_ORGANISATION_AUTH_NAME', 'Organisation');
 define('ROLE_ORGANISATION_NAME', 'Authentifizierte Organisation');
 define('ROLE_ADMINISTRATOR_NAME', 'Administrator');
 
-// 4 debug: menu_rebuild();
+// Vendor credentials
+define('MAPS_APP_ID', 'dM2oyuKpoJ1pwZmwe763');
+define('MAPS_APP_CODE', '6krR-U1PtbtPsib8sIMw7Q');
+
+// Initialize
+depot_set_active_regionalpartner();
+
+function depot_set_active_regionalpartner() {
+  
+  $all_regions = depot_get_regions();
+  $regionalpartner = $all_regions['leipzig.depot.social'];
+
+}
 
 function depot_admin_access_only() {
 
@@ -49,13 +64,10 @@ function depot_mail($key, &$message, $params) {
  */
 function depot_menu_alter(&$items) {
 
-  //var_dump($items);
-
    //$items['user/login']['access callback'] = 'depot_auth_user_access_only';
    $items['admin']['access callback'] = 'depot_admin_access_only';
 
 }
-
 
 /**
  * Implements hook_user_logout
@@ -176,6 +188,11 @@ function depot_menu() {
     'page arguments' => array(2),
   );
 
+  $items['depot/bulk_geocode_action'] = array(
+    'page callback' => 'depot_bulk_geocode_action',
+    'access callback' => 'depot_admin_access_only',
+  );
+
   return $items;
   
 }
@@ -185,7 +202,7 @@ function depot_user_auth_confirm($uid){
   $user = user_load($uid);
   $to = $user->mail;
 
-  drupal_set_message('Depot: Versuche nun, Rolle zuzuteilen. Kommt es zu einer Fehlermeldung, wurde möglicherweise der Link doppelt angeklickt womit der Benutzer bereits die neue Rolle zugeteilt bekommen hat!');
+  drupal_set_message('Depot Modul: Versuche nun, Rolle zuzuteilen. Sollte stattdessen eine leere Seite angezeigt werden, wurde möglicherweise der Link doppelt angeklickt womit der Benutzer bereits die neue Rolle zugeteilt bekommen hat...');
 
   // Try {
   db_query('INSERT INTO {users_roles} (uid, rid) VALUES (:uid, :rid)', array(':uid' => $uid, ':rid' => ROLE_ORGANISATION_AUTH));
@@ -200,7 +217,7 @@ function depot_user_auth_confirm($uid){
   );
 
   drupal_mail('depot','depot_organisation_authenticated',$to,'de',$params);
-  drupal_set_message(t('Dem Nutzer wurde erfolgreich die Rolle "'.ROLE_ORGANISATION_AUTH_NAME.'" zugeteilt und dieser hierüber informiert.'));
+  drupal_set_message(t('...Alles gut, dem Nutzer wurde erfolgreich die Rolle "'.ROLE_ORGANISATION_AUTH_NAME.'" zugeteilt und dieser hierüber via E-Mail informiert.'));
   drupal_goto('admin');
 
 }
@@ -382,7 +399,7 @@ function depot_add_units($type_id, $units_name, $total_units, $id_name_starter =
 /** 
  * Called by path user/%/organisation
  */
-function depot_build_user_edit_organisation_form(){
+function depot_build_user_edit_organisation_form() {
 
   include_once('forms/depot_user_organisation_form.php');
 
@@ -401,7 +418,7 @@ function depot_build_user_edit_organisation_form(){
  * Called by path reservierungen/%id
  * Only show booking details & state
  */
-function depot_buchung_detail($booking_id){
+function depot_buchung_detail($booking_id) {
 
   return depot_buchung_form($booking_id);
 
@@ -467,12 +484,11 @@ function depot_buchung_delete($booking_id){
    $params = array(
      'body' => $mail_body,
      'subject' => t('Depot Leipzig: Stornierung Deiner Leihanfrage'),
-     'headers' => array(
-       'Cc' => user_load($anbieter)->mail
-     )
    );
+
   
    drupal_mail('depot','depot_buchung_delete_form', user_load($ausleiher)->mail,'de', $params);
+   drupal_mail('depot','depot_buchung_delete_form', user_load($anbieter)->mail,'de', $params);
 
    drupal_set_message(t('Die Reservierung wurde erfolgreich storniert und Ver- bzw. Entleiher informiert.'));
    drupal_goto('ressourcen');
@@ -534,10 +550,12 @@ function depot_buchung_change_status($booking_id){
     drupal_mail('depot','depot_buchung_form', user_load($booking->field_ausleiher['und'][0]['value'])->mail,'de', $params);
 
     drupal_set_message(t('Die Reservierung wurde genehmigt und der Interessent benachrichtigt!'));
+    
     if (isset($ressource['field_verleihvertrag_']['und'][0]['value']) && $ressource['field_verleihvertrag_']['und'][0]['value']){
       drupal_set_message('Zudem wurde ein Leihvertrag erstellt welcher der Reservierung beiliegt.');
     }
-    drupal_goto('mein-depot/reservierungen');
+
+    drupal_goto('mein-depot/reservierungen/' . $booking_id);
 
   } else {
     $newStatus = ($booking->field_genehmigt['und'][0]['value'] == 0) ? t('akzeptiert') : t('abgewiesen');
@@ -685,18 +703,21 @@ function depot_form_alter(&$form, &$form_state, $form_id) {
       if (isset($form['contact'])){
         $form['contact']['contact']['#description'] = strip_tags($form['contact']['contact']['#description']);
       }
+
       unset($form['field_organisation_nachweis']);
 
     break;
     
     case 'views_exposed_form':
     
+      /* Disabled for depot v2.0:
       $form['bezirk_id']['#type'] = "select";
       $form['bezirk_id']['#size'] = null;
       $form['bezirk_id']['#default_value'] = 'All';
       $form['bezirk_id']['#required'] = FALSE;
       $form['bezirk_id']['#options'] = depot_get_bezirke(true);
-      
+      */
+
       $form['kategorie_id']['#type'] = "select";
       $form['kategorie_id']['#size'] = null;
       $form['kategorie_id']['#default_value'] = 'All';
@@ -706,6 +727,43 @@ function depot_form_alter(&$form, &$form_state, $form_id) {
     break;
     
   }
+}
+
+function depot_bulk_slugify_action() {
+
+  $query = new EntityFieldQuery();
+  $query->entityCondition('entity_type', 'bat_type');
+
+  $result = $query->execute();
+
+  if (count($result) > 0) {
+
+    $entities = entity_load('bat_type', array_keys($result['bat_type']));
+    $bezirke = bat_event_get_states('depot_bezirk');
+    foreach ($entities as $type) {
+
+      // Get attached fields
+      $wrapper = entity_metadata_wrapper('bat_type', $type);
+
+      $slug = /*$wrapper->type_id->value() . '-' .*/ slugify($wrapper->name->value()) . '-' . $wrapper->field_adresse_postleitzahl->value();
+
+      if (isset($bezirke[$wrapper->field_bezirk->value()['state_id']])) {
+        $slug .= '-' . slugify($bezirke[$wrapper->field_bezirk->value()['state_id']]['label']);
+      }
+      
+      $wrapper->field_slug = $slug;
+      $wrapper->save();
+    
+    }
+  }
+}
+
+function depot_get_regions() {
+  
+  $sites = array();
+  include(DRUPAL_ROOT . '\sites\depot_sites.php');
+  return $sites;
+
 }
 
 /**
@@ -793,15 +851,18 @@ function depot_get_available_units_by_rid($rid, $start_date, $end_date, $format 
 */
 function depot_get_bezirke($format = false){
   
-  if ($format){
+  if ($format) {
+
     $result = array();
     $result[''] = '<'.t('Alle').'>';
     foreach (bat_event_get_states('depot_bezirk') as $state_id => $state){
       $result[$state_id] = $state['label'];
     }
     natcasesort($result);
+
     return $result;
   }
+
   return bat_event_get_states('depot_bezirk');
   
 }
@@ -865,6 +926,8 @@ function depot_events_bulk_action($action, $type_id, $total_units, $begin, $end,
   }
   
   $free_units = depot_get_available_units_by_rid($type_id, $begin, $end);
+
+  watchdog('depot', 'total_units: '.(count($free_units) < $total_units) ? count($free_units) : $total_units . '  free_units: '. var_dump($free_units));
 
   if ($action == 'add'){
 
@@ -973,6 +1036,60 @@ function depot_upload_file() {
       return false;
     }
   }
+}
+
+/**
+ * @function depot_get_resources_geodata
+ * @return array List of resources, incl. their id, title, adress & geodata
+ */
+function depot_get_resources_geodata() {
+
+  $query = new EntityFieldQuery();
+  $query->entityCondition('entity_type', 'bat_type');
+
+  $result = $query->execute();
+  $output = '';
+
+  if (count($result) > 0) {
+
+    $entities = entity_load('bat_type', array_keys($result['bat_type']));
+    
+    foreach ($entities as $type) {
+      $wrapper = entity_metadata_wrapper('bat_type', $type);
+
+      if ($wrapper->field_adresse_latitude->value() != '' &&
+          $wrapper->field_adresse_longitude->value() != '') {
+          // @todo remove id
+          $output .= '{title:"'. $wrapper->name->value() .'",id:'. $wrapper->type_id->value() .',slug:"'. $wrapper->field_slug->value() .'",lat:'. $wrapper->field_adresse_latitude->value() .',lng:'. $wrapper->field_adresse_longitude->value() .',adress:"'. $wrapper->field_adresse_strasse->value() .'"},';
+      }
+    }
+  }
+
+  return $output;
+
+}
+
+
+function depot_get_blog_articles($limit = 5) {
+
+  $query = new EntityFieldQuery();
+  
+  $query->entityCondition('entity_type', 'node')
+   ->entityCondition('bundle', 'artikel')
+   ->propertyCondition('status', 1)
+   ->propertyOrderBy('created', 'DESC')
+   ->range(0, $limit);
+
+  $result = $query->execute();
+  $nodes = array();
+
+  if (isset($result['node'])) {
+    $nids = array_keys($result['node']);
+    $nodes = node_load_multiple($nids);
+  }
+  
+  return $nodes;
+
 }
 
 function humanize_price(&$price){

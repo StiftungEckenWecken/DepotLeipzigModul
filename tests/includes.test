@@ -1,0 +1,32 @@
+<?php
+
+class SimpletestUnitTestIncludesTestCase extends DrupalWebTestCase {
+    protected $privileged_user;
+
+    public static function getInfo() {
+
+        return array(
+            'name' => 'Depot Simpletest Example unit tests',
+            'description' => 'Depot example Test that simpletest_example_empty_mysql_date() works properly.',
+            'group' => 'Depot',
+        );
+
+    }
+
+    public function testMe () {
+        $this->assertTrue(true);
+    }
+
+    public function setUp() {
+        // Enable any modules required for the test. This should be an array of
+        // module names.
+        parent::setUp(array('simpletest_example'));
+        // Create and log in our privileged user.
+        $this->privileged_user = $this->drupalCreateUser(array(
+          'create simpletest_example content',
+          'extra special edit any simpletest_example',
+          ));
+        $this->drupalLogin($this->privileged_user);
+      }
+
+}

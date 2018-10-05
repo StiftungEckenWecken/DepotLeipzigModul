@@ -4,6 +4,8 @@ Buchungsplattform für das Teilen von Ressourcen
 ## Requirements
 > [Drupal 7](http://drupal.org/) & [BAT module](http://drupal.org/project/bat) - console access - MySQL DB
 
+> We recommend PHP7 with "php_intl.dll" extension running.
+
 ## Installation
 > 1. Install [Drush](http://drush.org) and [Composer](https://getcomposer.org/download/)
 > 2. If not yet done: Install Drupal 7 via Web-Frontend or CLI/Drush ([Howto](http://docs.drush.org/en/master/install/))
