@@ -14,6 +14,8 @@ function depot_ressource_edit_form($form, &$form_state, $type) {
   
   global $user;
 
+  $user = user_load($user->uid);
+
   $access = false;
 
   $form['intro'] = array(
@@ -82,7 +84,6 @@ function depot_ressource_edit_form($form, &$form_state, $type) {
   $form['field_fake_kategorie']['#options'] = $kategorien;
   $form['field_fake_kategorie']['#prefix'] = '<div class="medium-6 column">';
   $form['field_fake_kategorie']['#suffix'] = '</div>';
-
 
   $form['field_bild_i']['#prefix'] = '<fieldset class="medium-12 column"><legend>'.t('Bilder').'</legend><div class="medium-4 column">';
   $form['field_bild_i']['#suffix'] = '</div>';
@@ -253,7 +254,8 @@ function depot_ressource_edit_form_submit(&$form, &$form_state) {
 
   $type->save();
 
-  if ($newEntity) {
+  if (true || $newEntity) {
+    // @todo Check first if adress did change at all
 
     try {
 
@@ -271,7 +273,11 @@ function depot_ressource_edit_form_submit(&$form, &$form_state) {
       }
     } catch (Exception $e) {
       
-      drupal_set_message('Konnte keine Geodaten eintragen.');
+      if (user_has_role(ROLE_ADMINISTRATOR)) {
+        drupal_set_message('Administrator-Hinweis: Konnte keine Geodaten ermitteln.','warning');
+      }
+
+      watchdog('Konnte keine Geodaten ermitteln - Ressource Name: '. $type->name,'alert');
 
     }
 
@@ -322,12 +328,10 @@ function depot_ressource_edit_form_submit(&$form, &$form_state) {
       drupal_mail('depot','depot_ressource_form',$user->mail,'de',$params);  
       drupal_set_message(t('Nutzer wurde über Genehmigung benachrichtigt.'));
       depot_units_bulk_action('edit', $type->name, $type->type_id, $form_state['values']['field_anzahl_einheiten']['und'][0]['value']);    
-      drupal_set_message(t('Ressource "@name" wurde aktualisiert.', array('@name' => $type->name)));
 
-    } //else {
-      //not yet tested
-      //drupal_set_message('Achtung: Es wurden KEINE Änderungen vorgenommen. Sind Sie auch als Administrator eingloggt?')
-      //}
+    }
+
+    drupal_set_message(t('Ressource "@name" wurde aktualisiert.', array('@name' => $type->name)));
 
   }
 
