@@ -6,6 +6,8 @@ files/
 sites/*/files
 sites/*/private
 
+config.inc
+
 # Ignore default text files
 robots.txt
 /CHANGELOG.txt

@@ -1,21 +1,62 @@
 <?php
 
+global $base_url;
+global $regionalpartner;
+global $rp_sites;
+
+// Roles
 define('ROLE_ADMINISTRATOR', 3); // = 'Administrator'
 define('ROLE_ORGANISATION', 5); // = 'Organisation'
 define('ROLE_ORGANISATION_AUTH', 4); // = 'Authentifizierte Organisation'
+define('ROLE_REGIONALPARTNER', 6); // = 'Regionalpartner'
 
 define('ROLE_ORGANISATION_AUTH_NAME', 'Organisation');
 define('ROLE_ORGANISATION_NAME', 'Authentifizierte Organisation');
 define('ROLE_ADMINISTRATOR_NAME', 'Administrator');
+define('ROLE_REGIONALPARTNER_NAME', 'Regionalpartner');
 
-// 4 debug: menu_rebuild();
+// Booking-state
+define('DEPOT_STATUS_REQUESTED', 'requested');
+define('DEPOT_STATUS_CONFIRMED', 'confirmed');
+define('DEPOT_STATUS_CANCELLED', 'cancelled');
 
+include_once 'config.inc';
+
+include_once 'includes/uri.inc';
+include_once 'includes/geocoder.inc';
+include_once 'includes/Location.php';
+
+use function Geodistance\meters;
+use Geodistance\Location;
+
+// Initialize
+
+function depot_get_active_regionalpartner() {
+
+  if (empty($rp_sites)) {
+    $rp_sites = depot_get_regions();
+  }
+
+  // OR via base_path(); as $base_url is not known yet :(
+  $regionalpartner = $rp_sites[$_SERVER['HTTP_HOST']];
+
+  return $regionalpartner;
+
+}
+
+/**
+ * Check whether active user has any special roles assigned
+ * 
+ * @return bool
+ */
 function depot_admin_access_only() {
 
   global $user;
-  if (!in_array(ROLE_ADMINISTRATOR_NAME, $user->roles)){
+
+  if (!in_array(ROLE_ADMINISTRATOR_NAME, $user->roles) && !in_array(ROLE_REGIONALPARTNER_NAME, $user->roles)) {
     return false;
   }
+
   return true;
   
 }
@@ -38,7 +79,7 @@ function depot_mail($key, &$message, $params) {
 
   $message['subject'] = $params['subject'];
   $message['body'][] = $params['body'];
-
+ 
 }
 
 /**
@@ -47,21 +88,18 @@ function depot_mail($key, &$message, $params) {
  */
 function depot_menu_alter(&$items) {
 
-  //var_dump($items);
-
    //$items['user/login']['access callback'] = 'depot_auth_user_access_only';
    $items['admin']['access callback'] = 'depot_admin_access_only';
 
 }
 
-
 /**
  * Implements hook_user_logout
  */
-function depot_user_logout(){
+function depot_user_logout() {
 
   session_destroy();
-  drupal_set_message(t('Sie haben sich erfolgreich vom Depot abgemeldet!'));
+  drupal_set_message(t('Sie haben sich erfolgreich vom depot abgemeldet!'));
   drupal_goto();
 
 }
@@ -83,66 +121,23 @@ function depot_verfuegbarkeiten_ajax_callback($page_callback_result) {
  */
 function depot_menu() {
 
+  // -- User's - "Mein depot" - menu --
   $items['user/%user/organisation'] = array(
     'type' => MENU_LOCAL_TASK,
     'title' => t('Organisation'),
     'page callback' => 'depot_build_user_edit_organisation_form',
-    'description' => t('Depot-Konto als gemeinnützige Organisation führen'),
+    'description' => t('depot-Konto als gemeinnützige Organisation führen'),
     'access callback' => 'user_is_logged_in',
     'page arguments' => array(1),
   );
 
+  // -- Ressourcen --
   $items['ressourcen/%/verfuegbarkeiten'] = array(
     'title' => t('Verfügbarkeiten ändern'),
     'page callback' => 'depot_verfuegbarkeiten_calendar',
     'description' => t('Verfügbarkeiten für alle Einheiten einer Ressource'),
     'access callback' => 'user_is_logged_in',
     'delivery callback' => 'depot_verfuegbarkeiten_ajax_callback',
-    'page arguments' => array(1),
-  );
-
-  $items['reservierungen/neu'] = array(
-    'title' => t('Neue Reservierung'),
-    'page callback' => 'depot_buchung_form',
-    'description' => t('Neue Reservierung anlegen'),
-    'access callback' => 'user_is_logged_in'
-  );
-
-  $items['reservierungen/%'] = array(
-    'title' => t('Reservierungsdetails'),
-    'page callback' => 'depot_buchung_detail',
-    'description' => t('Reservierung einsehen'),
-    'access callback' => 'user_is_logged_in',
-    'page arguments' => array(1),
-  );
-
-  $items['reservierungen/%/edit'] = array(
-    'title' => t('Reservierung bearbeiten'),
-    'page callback' => 'depot_buchung_form',
-    'description' => t('Reservierung bearbeiten'),
-    'access callback' => 'user_is_logged_in',
-    'page arguments' => array(1),
-  );
-
-  $items['reservierungen/%/change_status'] = array(
-    'title' => t('Reservierungsstatus ändern'),
-    'page callback' => 'depot_buchung_change_status',
-    'description' => t('Reservierungsstatus ändern'),
-    'access callback' => 'user_is_logged_in',
-    'page arguments' => array(1),
-  );
-
-  $items['reservierungen/%/verleihvertrag'] = array(
-    'title' => t('Verleihvertrag'),
-    'page callback' => 'depot_buchung_verleihvertrag',
-    'access callback' => 'user_is_logged_in',
-    'page arguments' => array(1),
-  );
-
-  $items['reservierungen/%/delete'] = array(
-    'title' => t('Reservierung löschen'),
-    'page callback' => 'depot_buchung_delete',
-    'access callback' => 'user_is_logged_in',
     'page arguments' => array(1),
   );
 
@@ -161,6 +156,63 @@ function depot_menu() {
     'page arguments' => array(1),
   );
 
+  // -- Buchungen --
+  $items['reservierungen/%'] = array(
+    'page callback' => 'depot_redirect_my_bookings',
+    'access callback' => 'user_is_logged_in'
+  ); // @todo remove in v2.1.x
+
+  $items['buchungen/neu'] = array(
+    'title' => t('Neue Buchung'),
+    'page callback' => 'depot_buchung_form',
+    'description' => t('Neue Buchung anlegen'),
+    'access callback' => 'user_is_logged_in'
+  );
+
+  $items['buchungen/%'] = array(
+    'title' => t('Buchungsdetails'),
+    'page callback' => 'depot_buchung_detail',
+    'description' => t('Buchung einsehen'),
+    'access callback' => 'user_is_logged_in',
+    'page arguments' => array(1),
+  );
+
+  $items['buchungen/%/edit'] = array(
+    'title' => t('Buchung bearbeiten'),
+    'page callback' => 'depot_buchung_form',
+    'description' => t('Buchung bearbeiten'),
+    'access callback' => 'user_is_logged_in',
+    'page arguments' => array(1),
+  );
+
+  $items['buchungen/%/change_status'] = array(
+    'title' => t('Buchungsstatus ändern'),
+    'page callback' => 'depot_buchung_change_status',
+    'description' => t('Buchungsstatus ändern'),
+    'access callback' => 'user_is_logged_in',
+    'page arguments' => array(1),
+  );
+
+  $items['buchungen/%/verleihvertrag'] = array(
+    'title' => t('Verleihvertrag'),
+    'page callback' => 'depot_buchung_verleihvertrag',
+    'access callback' => 'user_is_logged_in',
+    'page arguments' => array(1),
+  );
+
+  $items['buchungen/%/ical'] = array(
+    'page callback' => 'depot_buchung_ical_export',
+    'access callback' => 'user_is_logged_in',
+    'page arguments' => array(1),
+  );
+
+  $items['buchungen/%/delete'] = array(
+    'title' => t('Buchung löschen'),
+    'page callback' => 'depot_buchung_delete',
+    'access callback' => 'user_is_logged_in',
+    'page arguments' => array(1),
+  );
+
   $items['depot/check_availability'] = array(
     'title' => 'Check ressource availability',
     'page callback' => 'depot_ajax_check_availability',
@@ -174,31 +226,337 @@ function depot_menu() {
     'page arguments' => array(2),
   );
 
+  /*$items['depot/bulk_geocode_action'] = array(
+    'page callback' => 'depot_bulk_geocode_action',
+    'access callback' => 'depot_admin_access_only',
+  );*/
+
+  $items['depot/bulk_autogenerate/%'] = array(
+    'page callback' => 'depot_bulk_autogenerate_action',
+    'access callback' => 'depot_admin_access_only',
+  );
+
+  $items['depot/ajax/getDistanceFromLocations'] = array(
+    'page callback' => 'depot_ajax_get_distance_from_locations',
+    'access callback' => TRUE
+  );
+
+  // -- Added via views module:
+  //
+  // user/%user/ressourcen
+  // user/%user/buchungen
+  // admin/depot/ressourcen
+  // admin/depot/buchungen
+
   return $items;
   
 }
 
-function depot_user_auth_confirm($uid){
+function depot_redirect_my_bookings () {
+  global $user;
+
+  drupal_goto('user/' . $user->uid . '/buchungen');
+}
+
+/**
+* Implements hook_block_info().
+*
+* This hook declares what blocks are provided by depot.
+*
+* @thanks https://api.drupal.org/api/examples/block_example!block_example.module/7.x-1.x
+*/
+function depot_block_info() {
+
+  return [
+    'depot_block_dashboard_analytics' => [
+      'info' => t('Dashboard analytics embed'),
+      'cache' => DRUPAL_CACHE_PER_ROLE,
+      'region' => 'dashboard_main'
+    ]
+  ];
+
+}
+
+/**
+ * Implements hook_block_view().
+ *
+ * This hook generates the contents of the blocks themselves.
+ * 
+ * @thanks https://api.drupal.org/api/examples/block_example!block_example.module/7.x-1.x
+ */
+function depot_block_view($delta = '') {
+
+  $block = [];
+
+  switch ($delta) {
+    case 'depot_block_dashboard_analytics':
+    // By adding this block programmatically we can control the cache and
+    // inject custom, instance-specific parameters required by Matomo
+
+    $rp = depot_get_active_regionalpartner();
+
+    $site_id = $rp['matomo_site_id'];
+    $token = MATOMO_USER_TOKEN;
+
+    $block['subject'] = t('depot Analytics');
+
+    $block['content'] = '
+    <h4>Anzahl Ressourcen</h4>
+    <p style="float:left;">
+      <a href="/admin/depot/ressourcen">Alle depot Ressourcen (Tabelle)</a>
+    </p>
+
+    <p>
+      <a class="button" href="https://analytics.depot.social/index.php?module=CoreHome&amp;viewDataTable=graphEvolution&amp;columns[]=soll&amp;columns[]=ist&amp;widget=1&amp;moduleToWidgetize=Depot&amp;actionToWidgetize=getDepotUsersAmount&amp;idSite='. $site_id .'&amp;period=day&amp;date=yesterday&amp;disableLink=1&amp;token_auth='. $token . ';action=index#?idSite=2&amp;period=day&amp;date=yesterday&amp;category=Depot&amp;subcategory=Depot%20Dashboard" style="float:right;" target="_blank" title="Analysetool für gesamte depot-Seite aufrufen (neuer Tab, erfordert Login in Matomo)">
+        Gesamtansicht in Matomo
+      </a>
+      <iframe frameborder="0" height="280" scrolling="no" src="https://analytics.depot.social/index.php?module=Widgetize&amp;action=iframe&amp;viewDataTable=graphEvolution&amp;columns[]=soll&amp;columns[]=ist&amp;widget=1&amp;moduleToWidgetize=Depot&amp;actionToWidgetize=getDepotResourcesAmount&amp;idSite=2&amp;period=week&amp;date=yesterday&amp;disableLink=1&amp;widget=1&amp;token_auth='. $token .'" width="100%"></iframe>
+        
+    </p>
+
+    <h4>Anzahl Buchungen</h4>
+    <p>
+      <a href="/admin/depot/buchungen">Alle depot Buchungen (Tabelle)</a>
+    </p>
+
+    <p>
+      <iframe frameborder="0" height="280" scrolling="no" src="https://analytics.depot.social/index.php?module=Widgetize&amp;action=iframe&amp;viewDataTable=graphEvolution&amp;columns[]=soll&amp;columns[]=ist&amp;widget=1&amp;moduleToWidgetize=Depot&amp;actionToWidgetize=getDepotBookingsAmount&amp;idSite='. $site_id .'&amp;period=week&amp;date=yesterday&amp;disableLink=1&amp;widget=1&amp;token_auth='. $token .'" width="100%"></iframe>
+    </p>
+
+    <h4>Anzahl Nutzer</h4>
+
+    <p>
+      <a href="/admin/people">Alle depot Nutzer (Tabelle)</a>
+    </p>
+
+    <p>
+      <iframe frameborder="0" height="280" scrolling="no" src="https://analytics.depot.social/index.php?module=Widgetize&amp;action=iframe&amp;viewDataTable=graphEvolution&amp;columns[]=soll&amp;columns[]=ist&amp;widget=1&amp;moduleToWidgetize=Depot&amp;actionToWidgetize=getDepotUsersAmount&amp;idSite='. $site_id .'&amp;period=week&amp;date=yesterday&amp;disableLink=1&amp;widget=1&amp;token_auth='. $token .'" width="100%"></iframe>
+    </p>
+    ';
+
+    break;
+  }
+
+  return $block;
+
+}
+
+    function depot_ajax_get_distance_from_locations () {
+
+    header('Content-type:application/json;charset=utf-8');
+
+    $params = drupal_get_query_parameters();
+
+    if (!isset($params['lat']) || empty($params['lat'])
+        || !isset($params['lng']) || empty($params['lng'])
+        || !isset($params['ids']) || empty($params['ids'])) {
+
+        // abort request
+        http_response_code(500);
+
+        echo '
+        {
+            "status" : "error",
+            "data" : {
+                "error" : "Missing parameters or parameter values."
+            }
+        }';
+
+        drupal_exit();
+    }
+
+    http_response_code(200);
+
+    $lat = $params['lat'];
+    $lng = $params['lng'];
+
+    $request_location = new Location($lat, $lng);
+    
+    $resource_ids = explode(',', $params['ids']);
+
+    $resources = bat_type_load_multiple($resource_ids, array(), false);
+
+    $resources_distances = [];
+
+    foreach ($resources as $id => $resource) {
+
+        $res_lat = $resource->field_adresse_latitude['und'][0]['value'];
+        $res_lng = $resource->field_adresse_longitude['und'][0]['value'];
+
+        if (!empty($res_lat) && !empty($res_lng)) {
+        $resource_location = new Location($res_lat, $res_lng);
+        $resources_distances[$id] = meters($request_location, $resource_location);
+        }
+    }
+
+    echo '
+    {
+        "status" : "success",
+        "data" : 
+        ' . json_encode($resources_distances) . ' 
+        
+    }';
+
+    drupal_exit();
+    }
+
+/**
+ * Fetch random wiki article, turn it into a demo resource
+ * Must be called directly via URL, no admin interface yet
+ */
+function depot_bulk_autogenerate_action ($amount = 5) {
+
+  if (!empty($amount)) {
+
+    echo '<p>Starte Generator...</p>';
+
+    include_once 'includes/WikiRandom.inc';
+
+    $available_kategorien = ['9','13','14','32','33','34','35','36','89']; // etc. etc.
+
+    for ($i = 0; $i < $amount; $i++) {
+
+        $wr = new WikiRandom("de");
+
+        $randomKategorie = rand(0,8);
+
+        $randomPrice = (string) rand(1, 30);
+        $formatter = new NumberFormatter('de_DE', NumberFormatter::CURRENCY);
+
+        $images = $wr->getArticleImages();
+
+        $uploadFile = '';
+
+        if (isset($images[0])) {
+          if (strpos($images[0], '.svg') == FALSE) {
+            // We must transfer file to local storage
+            $filename = 'demo-image-' . $wr->getId() . end(explode('/', $images[0]));
+            $image = file_get_contents($images[0]);
+            $uploadedFile = file_save_data($image, 'public://' . $filename, FILE_EXISTS_RENAME);
+          }
+        }
+
+        $type = bat_type_create(
+          [
+            'type' => 'depot',
+            'uid' => 1, // @todo Set for demo account
+            'created' => REQUEST_TIME,
+            'name' => $wr->getTitle(),
+            'field_beschreibung' => [
+              'und' => [
+                0 => [
+                  'value' => $wr->getFirstSentence() . ' ----- ACHTUNG: Dies ist eine nicht buchbare, automatisch generierte Demo-Ressource. Vollständiger Artikel und Lizenzangaben: ' . $wr->getLink()
+                ]
+              ]
+            ],
+            'field_bild_i' => [
+              LANGUAGE_NONE => [
+                '0' => (array)$uploadedFile
+              ]
+            ],
+            'field_kosten' => [
+              'und' => [
+                0 => [
+                  'value' => $formatter->formatCurrency((float)$randomPrice, 'EUR')
+                ]
+              ]
+            ],
+            'field_kosten_2' => [
+              'und' => [
+                0 => [
+                  'value' => $formatter->formatCurrency((float)$randomPrice / 2, 'EUR')
+                ]
+              ]
+            ],
+            'field_adresse_strasse' => [
+              'und' => [
+                0 => [
+                  'value' => 'Demo-Strasse 12'
+                ]
+              ]
+            ],
+            'field_adresse_postleitzahl' => [
+              'und' => [
+                0 => [
+                  'value' => 12345
+                ]
+              ]
+            ],
+            'field_kategorie' => [
+              'und' => [
+                0 => [
+                  'state_id' => $available_kategorien[$randomKategorie]
+                ]
+              ]
+            ],
+            'field_slug' => [
+              'und' => [
+                0 => [
+                  'value' => 'DEMO-' . slugify($wr->getTitle())
+                ]
+              ]
+            ],
+            'field_adresse_latitude' => [
+              'und' => [
+                0 => [
+                  'value' => rand(1,80)
+                ]
+              ]
+            ],
+            'field_adresse_longitude' => [
+              'und' => [
+                0 => [
+                  'value' => rand(1,80)
+                ]
+              ]
+            ],
+            'field_aktiviert' => [
+              'und' => [
+                0 => [
+                  'value' => 1
+                ]
+              ]
+            ]
+          ]
+        );
+
+        $type->save();
+
+    }
+
+    echo "<p>${amount} Ressourcen hinzugefügt.</p>";
+
+  }
+
+  echo '<p>Fertig!</p>'; 
+  drupal_exit();
+
+}
+
+function depot_user_auth_confirm ($uid) {
+
+  $regionalpartner = depot_get_active_regionalpartner();
 
   $user = user_load($uid);
   $to = $user->mail;
 
-  drupal_set_message('Depot: Versuche nun, Rolle zuzuteilen. Kommt es zu einer Fehlermeldung, wurde möglicherweise der Link doppelt angeklickt womit der Benutzer bereits die neue Rolle zugeteilt bekommen hat!');
+  drupal_set_message('depot Modul: Versuche nun, Rolle zuzuteilen. Sollte stattdessen eine leere Seite angezeigt werden, wurde möglicherweise der Link doppelt angeklickt womit der Benutzer bereits die neue Rolle zugeteilt bekommen hat...');
 
   // Try {
   db_query('INSERT INTO {users_roles} (uid, rid) VALUES (:uid, :rid)', array(':uid' => $uid, ':rid' => ROLE_ORGANISATION_AUTH));
   // catch: drupal_set_message('Bereits eingetragen')
 
-  $mail_body = "Lieber Depot-Nutzer,\r\n\r\n";
+  $mail_body = "Liebe depot-NutzerIn,\r\n\r\n";
   $mail_body .= "Dein Antrag auf Gemeinwohl-Anerkennung wurde bestätigt. Deine Organisation kann nun Ressourcen zu besonderen Preisen ausleihen.\r\n\r\n";
-  $mail_body .= "Viele Grüße,\r\n Dein Team von Depot Leipzig";
+  $mail_body .= "Viele Grüße,\r\n Dein Team vom depot " . $regionalpartner['region']['name'];
+
   $params = array(
     'body' => $mail_body,
-    'subject' => t('Depot Leipzig: Antrag auf Gemeinnützigkeit bestätigt'),
+    'subject' => t('depot @name: Antrag auf Gemeinnützigkeit bestätigt', array('@name' => $regionalpartner['region']['name'])),
   );
 
   drupal_mail('depot','depot_organisation_authenticated',$to,'de',$params);
-  drupal_set_message(t('Dem Nutzer wurde erfolgreich die Rolle "'.ROLE_ORGANISATION_AUTH_NAME.'" zugeteilt und dieser hierüber informiert.'));
+  drupal_set_message(t('...Alles gut, dem Nutzer wurde erfolgreich die Rolle "'.ROLE_ORGANISATION_AUTH_NAME.'" zugeteilt und dieser hierüber via E-Mail informiert.'));
   drupal_goto('admin');
 
 }
@@ -233,7 +591,7 @@ function depot_verfuegbarkeiten_calendar($unit_type){
   }
 
   // Check if user has permission to view calendar data for this event type.
-  if (!user_has_role(ROLE_ADMINISTRATOR) || $type->uid != $user->uid) {
+  if (!depot_admin_access_only() || $type->uid != $user->uid) {
     drupal_access_denied();
   }
 
@@ -396,7 +754,7 @@ function depot_build_user_edit_organisation_form() {
 }
 
 /** 
- * Called by path reservierungen/%id
+ * Called by path buchungen/%id
  * Only show booking details & state
  */
 function depot_buchung_detail($booking_id) {
@@ -423,79 +781,95 @@ function depot_inline_entity_form_reference_form_alter(&$reference_form, &$form_
 }
 
 /**
- * Called by path reservierungen/%id/delete
+ * Called by path buchungen/%id/delete
  */
 function depot_buchung_delete($booking_id){
   
   global $user;
   global $base_url;
 
+  $regionalpartner = depot_get_active_regionalpartner();
+
   $booking = bat_booking_load($booking_id);
-  $booking_proxy = get_object_vars($booking);
+
+  $booking_proxy = get_object_vars($booking); // Clone
   $anbieter = $booking_proxy['field_verleiher']['und'][0]['value'];
   $ausleiher = $booking_proxy['field_ausleiher']['und'][0]['value'];
 
-  if (empty($booking) || (!user_has_role(ROLE_ADMINISTRATOR) && $anbieter != $user->uid && $ausleiher != $user->uid)){
+  if (empty($booking) || (!depot_admin_access_only() && $anbieter != $user->uid && $ausleiher != $user->uid)) {
     drupal_access_denied();
     drupal_exit();
   }
 
+  $ausleiher = user_load($ausleiher);
+  $anbieter = user_load($anbieter);
+
   $created = (new DateTime())->setTimestamp($booking_proxy['created']);
 
-  // Get & Delete connected events and its references
+  // Get & Delete connected booking events and their references
   $booking_events = db_select('field_data_field_booking_id','e')
    ->fields('e', array('entity_id'))
    ->condition('field_booking_id_value', $booking_id)
    ->execute()
    ->fetchAll();
 
-   // bat_event_delete($form_state['bat_event']);
-
    foreach ($booking_events as $event){
      $booking_event = bat_event_load($event->entity_id);
      $booking_event->delete();
-   }
-  
-   $booking->delete();
+   }   
+   
+   // Update February 2019: Don't delete, but keep the booking and set its state to cancelled
+   $booking->field_depot_booking_status['und'][0]['value'] = DEPOT_STATUS_CANCELLED;
+   $booking->field_depot_booking_status_by['und'][0]['value'] = $user->uid;
 
-   $mail_body = "Lieber Nutzer des Depot Leipzig,\r\n\r\n";
-   $mail_body .= "hiermit bestätigen wir, dass Deine Leihanfrage vom ".$created->format('d.m.Y')." (ID ".$booking->booking_id.") storniert und alle damit verbundenen Reservierungen aus unserem System entfernt wurden.\r\n\r\n";
-   $mail_body .= "Viele Grüße,\r\n Dein Team vom Depot Leipzig";
+   // WAS: $booking->delete();
+   $booking->save();
+
+   $_user = user_load($user->uid);
+
+   $mail_body = "Liebe NutzerIn des depot ". $regionalpartner['region']['name'] .",\r\n\r\n";
+   $mail_body .= "hiermit bestätigen wir, dass die Leihanfrage vom ".$created->format('d.m.Y')." (ID ".$booking->booking_id.") durch den/die NutzerIn ". $_user->field_vorname['und'][0]['value'].' '.$_user->field_nachname['und'][0]['value'] ." storniert wurde.\r\n\r\n";
+   $mail_body .= "Viele Grüße,\r\n Dein Team vom depot " . $regionalpartner['region']['name'];
 
    $params = array(
      'body' => $mail_body,
-     'subject' => t('Depot Leipzig: Stornierung Deiner Leihanfrage'),
-   );
-
+     'subject' => t('depot @name: Stornierung Deiner Leihanfrage', array('@name' => $regionalpartner['region']['name'])),
+   );   
   
-   drupal_mail('depot','depot_buchung_delete_form', user_load($ausleiher)->mail,'de', $params);
-   drupal_mail('depot','depot_buchung_delete_form', user_load($anbieter)->mail,'de', $params);
+   drupal_mail('depot','depot_buchung_delete_form', $ausleiher->mail,'de', $params);
+   drupal_mail('depot','depot_buchung_delete_form', $anbieter->mail,'de', $params);
 
-   drupal_set_message(t('Die Reservierung wurde erfolgreich storniert und Ver- bzw. Entleiher informiert.'));
+   drupal_set_message(t('Die Buchung wurde erfolgreich storniert und Ver- bzw. Entleiher informiert.'));
    drupal_goto('ressourcen');
 
 }
 
 /** 
- * Called by path reservierungen/%id/change_status
+ * Called by path buchungen/%id/change_status
+ * 
+ * Changes booking status from "requested" to "confirmed"
  */
 function depot_buchung_change_status($booking_id){
   
   global $user;
   global $base_url;
 
+  $regionalpartner = depot_get_active_regionalpartner();
+
   $booking = bat_booking_load($booking_id);
 
-  if (!user_has_role(ROLE_ADMINISTRATOR) && $booking->field_verleiher['und'][0]['value'] != $user->uid){
+  if (!depot_admin_access_only() && $booking->field_verleiher['und'][0]['value'] != $user->uid) {
     drupal_goto('mein-depot');
   }
 
   // TODO: Is already accepted? If so, extend view
 
-  if (!empty($_POST)){
-    
+  if (!empty($_POST)) {
+
     $booking->changed = time();
-    $booking->field_genehmigt['und'][0]['value'] = ($booking->field_genehmigt['und'][0]['value'] == 0) ? 1 : 0;
+    $booking->field_depot_booking_status['und'][0]['value'] = 'confirmed';
+    $booking->field_depot_booking_status_by['und'][0]['value'] = $user->uid;
+
     $booking->save();
 
     $anbieter = user_load($booking->field_verleiher['und'][0]['value']);
@@ -503,11 +877,11 @@ function depot_buchung_change_status($booking_id){
     $ressource = get_object_vars(bat_type_load($booking->field_ressource_id['und'][0]['value']));
     $created = (new DateTime())->setTimestamp($booking->created);
 
-    $mail_body = "Lieber Nutzer des Depot Leipzig,\r\n\r\n";
-    $mail_body .= "Deine Leihanfrage vom ".$created->format('d.m.Y')." wurde vom Anbieter bestätigt. Bitte prüfe nocheinmal die Reservierungs-Daten unter ".$base_url."/reservierungen/".$booking->booking_id."/edit, denn es kann sein, dass der Anbieter Änderungen ggü Deinen Wünschen vorgenommen hat.\r\n\r\n";
+    $mail_body = "Liebe NutzerIn des depot " . $regionalpartner['region']['name'] .",\r\n\r\n";
+    $mail_body .= "Deine Leihanfrage vom ".$created->format('d.m.Y')." wurde vom Anbieter bestätigt. Bitte prüfe nocheinmal die Reservierungs-Daten unter ".$base_url."/buchungen/".$booking->booking_id."/edit, denn es kann sein, dass der Anbieter Änderungen ggü Deinen Wünschen vorgenommen hat.\r\n\r\n";
    
     if (isset($ressource['field_verleihvertrag_']['und'][0]['value']) && $ressource['field_verleihvertrag_']['und'][0]['value']){
-      $mail_body .= "Zudem wurde ein Leihvertrag erstellt welcher unter ".$base_url."/reservierungen/".$booking->booking_id."/verleihvertrag abrufbar ist. Bei der Übergabe der Ressource wird der Anbieter Dich ggf. bitten, den dann ausgedruckten(!) Verleihvertrag zu unterschreiben.\r\n\r\n";
+      $mail_body .= "Zudem wurde ein Leihvertrag erstellt welcher unter ".$base_url."/buchungen/".$booking->booking_id."/verleihvertrag abrufbar ist. Bei der Übergabe der Ressource wird der Anbieter Dich ggf. bitten, den dann ausgedruckten(!) Verleihvertrag zu unterschreiben.\r\n\r\n";
     }
 
     if (isset($ressource['field_text_buchungsbes_tigung']['und'][0]['value'])){
@@ -517,12 +891,12 @@ function depot_buchung_change_status($booking_id){
     $mail_body .= "Bitte stelle unbedingt sicher, dass Du am Abhol-/Bereitstellungsort der Ressource pünktlich eintriffst, denn dem Anbieter der Ressource wird das Teilen nur Spaß machen, wenn er nicht unnötig auf Nutzer seiner Ressource warten muss. Sollte Dir etwas dazwischen kommen und Du kannst deshalb nicht pünktlich erscheinen, informiere den Ansprechpartner am Abhol-/Bereitstellungsort bitte so früh wie möglich über die angegebene Telefonnummer (". $anbieter->field_telefonnummer['und'][0]['value'] .") bzw. via Mail (". $anbieter->mail .").\r\n\r\n";
 
     $mail_body .= "Bei weiteren Fragen kontaktiere bitte direkt den Anbieter. Sollte beim Buchungsprozess etwas nicht wie gewüncht funktioniert haben, teile uns dies bitte unter ".$base_url."/contact mit.\r\n\r\n";
-    $mail_body .= "Wir hoffen, Dir gefällt das depot und das Teilen von Ressourcen klappt wie erwartet. Hast Du vielleicht selbst Ressourcen, die Du gerne mit anderen teilen möchtest? Dann würde es uns freuen, wenn Du sie unter https://depot-leipzig.de/ressourcen/neu in depot-leipzig.de einstellen würdest.\r\n\r\n";
-    $mail_body .= "Vielen Dank und bis bald, Dein Team vom Depot Leipzig";
+    $mail_body .= "Wir hoffen, Dir gefällt das depot und das Teilen von Ressourcen klappt wie erwartet. Hast Du vielleicht selbst Ressourcen, die Du gerne mit anderen teilen möchtest? Dann würde es uns freuen, wenn Du sie unter https://". $regionalpartner['domain'] ."/ressourcen/neu in Dein depot einstellen würdest.\r\n\r\n";
+    $mail_body .= "Vielen Dank und bis bald, Dein Team vom depot " . $regionalpartner['region']['name'];
 
     $params = array(
       'body' => $mail_body,
-      'subject' => t('Depot Leipzig: Bestätigung Deiner Reservierungsanfrage'),
+      'subject' => t('depot @name: Bestätigung Deiner Buchungsanfrage', array('@name' => $regionalpartner['region']['name'])),
       'headers' => array(
         'Cc' => $anbieter->mail
       )
@@ -530,38 +904,156 @@ function depot_buchung_change_status($booking_id){
   
     drupal_mail('depot','depot_buchung_form', user_load($booking->field_ausleiher['und'][0]['value'])->mail,'de', $params);
 
-    drupal_set_message(t('Die Reservierung wurde genehmigt und der Interessent benachrichtigt!'));
+    drupal_set_message(t('Die Buchung wurde genehmigt und der Interessent benachrichtigt!'));
     
     if (isset($ressource['field_verleihvertrag_']['und'][0]['value']) && $ressource['field_verleihvertrag_']['und'][0]['value']){
-      drupal_set_message('Zudem wurde ein Leihvertrag erstellt welcher der Reservierung beiliegt.');
+      drupal_set_message('Zudem wurde ein Leihvertrag erstellt welcher der Buchung beiliegt.');
     }
 
-    drupal_goto('mein-depot/reservierungen/' . $booking_id);
+    drupal_goto('buchungen/' . $booking_id);
 
   } else {
-    $newStatus = ($booking->field_genehmigt['und'][0]['value'] == 0) ? t('akzeptiert') : t('abgewiesen');
-    $div = '<div id="status-change-panel" class="medium-12 panel">'.t('Möchten Sie den Status für die Reservierung auf <strong>@status</strong> setzen?', array('@status'=>$newStatus));
-    $div .= '<br /><br /><form method="post" action="#"><input type="hidden" name="bla" value="bla" /><input type="submit" class="button" value="'.t('Status ändern').'"></form><a href="/mein-depot/reservierungen">'.t('Abbrechen').'</a></div>';
+    $newStatus = ($booking->field_depot_booking_status['und'][0]['value'] == DEPOT_STATUS_REQUESTED) ? t('akzeptiert') : t('storniert');
+    $div = '<div id="status-change-panel" class="medium-12 panel">'.t('Möchten Sie den Status für die Buchung auf <strong>@status</strong> setzen?', array('@status'=>$newStatus));
+    $div .= '<br /><br /><form method="post" action="#"><input type="hidden" name="bla" value="bla" /><input type="submit" class="button" value="'.t('Status ändern').'"></form><a href="/buchungen/'. $booking_id . '">'.t('Abbrechen').'</a></div>';
     return $div;
   }
 
 }
 
-function depot_buchung_verleihvertrag($booking_id){
+/**
+ * Check if logged in user is admin or one of the booking owners
+ * 
+ * @param $booking BATBooking
+ * @return bool
+ */
+function depot_booking_user_has_access($booking) {
+
+  global $user;
+
+  if (depot_admin_access_only()) return true;
+
+  $sessionUser = user_load($user->uid);
+  $ausleiher = $booking->field_ausleiher['und'][0]['value'];
+  $verleiher = $booking->field_verleiher['und'][0]['value'];
+
+  return ($user->uid == $ausleiher || $user->uid == $verleiher);
+
+}
+
+function depot_buchung_ical_export($booking_id) 
+{
+
+  global $user;
+
+  $booking = bat_booking_load($booking_id);
+
+  if (isset($booking) && !empty($booking)) {
+
+    if (!depot_booking_user_has_access($booking)) {
+      // Illegal request, abort
+      depot_form_goto('<front>');
+    }
+  } else {
+    // Non-existing reservation, abort
+    drupal_not_found();
+  }
+  
+  // Set up ical state (keep it slim though, you're handling with 80's technologies)
+  $rp = depot_get_active_regionalpartner();
+
+  $begin_end_interval = '10'; // We assume 10 minutes for take-up and go
+  $begin = new DateTime($booking->booking_start_date['und'][0]['value']);
+  $end   = new DateTime($booking->booking_end_date['und'][0]['value']);
+
+  $begin_end = clone $begin;
+  $begin_end->add(new DateInterval('PT' . $begin_end_interval . 'M'));
+
+  $end_end = clone $end;
+  $end_end->add(new DateInterval('PT' . $begin_end_interval . 'M'));
+
+  //$ressource = get_object_vars(bat_type_load($booking->field_ressource_id['und'][0]['value']));
+  $ressource_name = $booking->field_name_ressource['und'][0]['value'];
+  //$ausleiher = user_load($booking->field_ausleiher['und'][0]['value']);
+  //$verleiher = user_load($booking->field_verleiher['und'][0]['value']);
+
+  $description  = "Buchung angefragt von ". $booking->field_ausleiher_name['und'][0]['value'] . ', ';
+  $description .= $begin->format('d.m.Y H:i') . " Uhr - " . $end->format('d.m.Y H:i') . " Uhr, ". $booking->field_einheiten['und'][0]['value']." Einheit(en).\n";
+  $description .= "Alle Buchungsdetails unter https://" . $rp['domain'] . "/buchungen/" . $booking_id . " (erfordert Login)";
+
+  // Generate the ical!
+  // @thanks https://github.com/zcontent/icalendar
+  include_once 'includes/icalendar/zapcallib.php';
+
+  $unique = date('dssm') . $booking_id . "@depot.social";
+
+  $icalobj = new ZCiCal();
+
+  $datanode = new ZCiCalDataNode("PRODID:-//depot.social//EN");
+	$icalobj->curnode->data[$datanode->getName()] = $datanode;
+
+  $eventobj1 = new ZCiCalNode("VEVENT", $icalobj->curnode);
+
+  $eventobj1->addNode(new ZCiCalDataNode("DTSTART:" . ZCiCal::fromSqlDateTime($begin->format('Y-m-d H:i:s'))));
+  $eventobj1->addNode(new ZCiCalDataNode("DTEND:" . ZCiCal::fromSqlDateTime($begin_end->format('Y-m-d H:i:s'))));
+
+  $eventobj1->addNode(new ZCiCalDataNode("SUMMARY:depot - Beginn Mietzeit " . $ressource_name));
+  $eventobj1->addNode(new ZCiCalDataNode("UID:1" . $unique));
+  $eventobj1->addNode(new ZCiCalDataNode("Description:" . ZCiCal::formatContent($description)));
+  $eventobj1->addNode(new ZCiCalDataNode("DTSTAMP:" . ZCiCal::fromSqlDateTime()));
+
+  $eventobj2 = new ZCiCalNode("VEVENT", $icalobj->curnode);
+
+  $eventobj2->addNode(new ZCiCalDataNode("DTSTART:" . ZCiCal::fromSqlDateTime($end->format('Y-m-d H:i:s'))));
+  $eventobj2->addNode(new ZCiCalDataNode("DTEND:" . ZCiCal::fromSqlDateTime($end_end->format('Y-m-d H:i:s'))));
+
+  $eventobj2->addNode(new ZCiCalDataNode("SUMMARY:depot - Ende Mietzeit " . $ressource_name));
+  $eventobj2->addNode(new ZCiCalDataNode("UID:2" . $unique));
+  $eventobj2->addNode(new ZCiCalDataNode("Description:" . ZCiCal::formatContent($description)));
+  $eventobj2->addNode(new ZCiCalDataNode("DTSTAMP:" . ZCiCal::fromSqlDateTime()));
+
+  $renderedObj = $icalobj->export();
+
+  // Set headers and print 
+  header('Content-Type: text/ics');
+  header('Content-Length: ' . strlen($icalobj->export()));
+  header('Content-Disposition: attachment; filename="depot_buchung_'. $booking_id .'.ics"');
+
+  echo $icalobj->export();
+  drupal_exit();
+
+
+}
+
+function depot_buchung_verleihvertrag($booking_id)
+{
   
   global $user;
 
   $booking = bat_booking_load($booking_id);
+
+  if (isset($booking) && !empty($booking)) {
+
+    if (!depot_booking_user_has_access($booking)) {
+      // Illegal request, abort
+      depot_form_goto('<front>');
+    }
+  } else {
+    // Non-existing reservation, abort
+    drupal_not_found();
+  }
+
   $anbieter = user_load($booking->field_verleiher['und'][0]['value']);
   $ausleiher = user_load($booking->field_ausleiher['und'][0]['value']);
   $ressource = get_object_vars(bat_type_load($booking->field_ressource_id['und'][0]['value']));
 
   if (isset($ressource['field_verleihvertrag_']['und'][0]['value'])){
     $booking_header = depot_buchung_form($booking_id, true)['buchung_header']['#markup'];
-    $booking_header = str_replace('<div class="medium-12 column"><h5 class="left">Ihre Reservierung</h5><hr /></div>','',$booking_header);
+    $booking_header = str_replace('<div class="medium-12 column"><h5 class="left">Ihre Buchung</h5><hr /></div>','',$booking_header);
     include_once(path_to_theme().'/templates/verleihvertrag.tpl.php');
     return pdf_using_mpdf_api($html);
   } else if ($anbieter->uid != $user->uid && $ausleiher->uid != $user->uid) {
+    // @todo Can be removed as user_has_access triggered above
     drupal_access_denied();
   } else {
     drupal_set_message(t('Der Anbieter hat Verleihverträge für diese Ressource deaktiviert'),'warning');
@@ -577,7 +1069,7 @@ function depot_buchung_form($booking_id = null, $force_header_only = false){
 
   global $user;
 
-  if (isset($booking_id)){
+  if (isset($booking_id)) {
     $booking = bat_booking_load($booking_id);
   } else {
     $booking = bat_booking_create(array('type' => 'standard', 'uid' => $user->uid));
@@ -586,7 +1078,7 @@ function depot_buchung_form($booking_id = null, $force_header_only = false){
     $booking->status = 1;
   }
 
-  if ($force_header_only){
+  if ($force_header_only) {
     $booking->force_header_only = 1;
   }
 
@@ -637,7 +1129,6 @@ function _buchungen_neu_redirect() {
   
 }
 
-
 /**
  * Implements hook_preprocess_views_view_table
  */
@@ -684,27 +1175,79 @@ function depot_form_alter(&$form, &$form_state, $form_id) {
       if (isset($form['contact'])){
         $form['contact']['contact']['#description'] = strip_tags($form['contact']['contact']['#description']);
       }
+
       unset($form['field_organisation_nachweis']);
 
     break;
     
     case 'views_exposed_form':
     
+      /* Disabled for depot v2.0 as it disturbes on some BAT-specific forms
       $form['bezirk_id']['#type'] = "select";
       $form['bezirk_id']['#size'] = null;
       $form['bezirk_id']['#default_value'] = 'All';
       $form['bezirk_id']['#required'] = FALSE;
       $form['bezirk_id']['#options'] = depot_get_bezirke(true);
-      
-      $form['kategorie_id']['#type'] = "select";
-      $form['kategorie_id']['#size'] = null;
-      $form['kategorie_id']['#default_value'] = 'All';
-      $form['kategorie_id']['#required'] = FALSE;
-      $form['kategorie_id']['#options'] = depot_get_kategorien(true);
-      
+      */
+
+      if ($form['#action'] !== '/admin/depot/buchungen') {
+
+        $form['kategorie_id']['#type'] = "select";
+        $form['kategorie_id']['#size'] = null;
+        $form['kategorie_id']['#required'] = FALSE;
+        $form['kategorie_id']['#options'] = depot_get_kategorien(true);
+        // HAS to be validated in order to skip auto-selection 
+        $form['kategorie_id']['#validated'] = true;
+
+      }
     break;
     
   }
+}
+
+function depot_bulk_slugify_action() {
+
+  $query = new EntityFieldQuery();
+  $query->entityCondition('entity_type', 'bat_type');
+
+  $result = $query->execute();
+
+  if (count($result) > 0) {
+
+    $entities = entity_load('bat_type', array_keys($result['bat_type']));
+    $bezirke = bat_event_get_states('depot_bezirk');
+    foreach ($entities as $type) {
+
+      // Get attached fields
+      $wrapper = entity_metadata_wrapper('bat_type', $type);
+
+      $slug = /*$wrapper->type_id->value() . '-' .*/ slugify($wrapper->name->value()) . '-' . $wrapper->field_adresse_postleitzahl->value();
+
+      if (isset($bezirke[$wrapper->field_bezirk->value()['state_id']])) {
+        $slug .= '-' . slugify($bezirke[$wrapper->field_bezirk->value()['state_id']]['label']);
+      }
+      
+      $wrapper->field_slug = $slug;
+      $wrapper->save();
+    
+    }
+  }
+}
+
+function depot_get_regions() {
+
+  if (!empty($rp_sites)) {
+    return $rp_sites;
+  }
+  
+  $sites = array();
+
+  include(DRUPAL_ROOT . '/sites/depot_sites.php');
+
+  $rp_sites = $sites;
+
+  return $sites;
+
 }
 
 /**
@@ -714,9 +1257,15 @@ function depot_user_view($account, $view_mode) {
 
   global $user;
 
+  $rp = depot_get_active_regionalpartner();
+  
+  if ($account->access == 0) {
+    drupal_set_message(t('Willkommen beim depot @name! Mit einem Klick auf das depot-Logo geht es weiter zur Ressourcen-Übersicht. Wir wünschen Dir viel Spaß mit unserem Angebot!', array('@name' =>  $rp['region']['name'])));
+  }
+
   // TODO: 2 forms, seperated by hr. Form 1: inputs from $user
 
-  $text = '<h3>'.t('Ihr Depot Konto').'</h3>';
+  $text = '<h3>'.t('Ihr depot Konto').'</h3>';
   $text .= '<p>'.t('Hier können Sie bestehende Kontaktdaten ändern oder Ihr Konto als Organisation betreiben.') .'</p>';
   $text .= '<p>'.t('Sie haben noch offene Fragen oder möchten Ihr Konto deaktivieren lassen? Bitte wenden Sie sich <a href="/contact" title="Kontaktformular">direkt an uns</a>.').'</p><hr />';
  
@@ -759,7 +1308,7 @@ function depot_get_available_units_by_rid($rid, $start_date, $end_date, $format 
 
   $events = bat_api_services_events_index_calendar(0, $rid, $start_date, $end_date, 'depot_availability', TRUE);  
   
-  if ($format){
+  if ($format) {
     $event_ids = array();
     $clean_up_ids = array();
     foreach ($events as $key => $event){
@@ -786,34 +1335,39 @@ function depot_get_available_units_by_rid($rid, $start_date, $end_date, $format 
   
 }
 
-/*
-  function depot_get_bezirke
-  @return array
-*/
-function depot_get_bezirke($format = false){
+/**
+ * @function depot_get_bezirke
+ * @param format bool Great for select-lists
+ * @return array
+ */
+function depot_get_bezirke($format = false) {
   
-  if ($format){
+  if ($format) {
+
     $result = array();
     $result[''] = '<'.t('Alle').'>';
+
     foreach (bat_event_get_states('depot_bezirk') as $state_id => $state){
       $result[$state_id] = $state['label'];
     }
-    natcasesort($result);
-    return $result;
+
+    return natcasesort($result);
+
   }
+
   return bat_event_get_states('depot_bezirk');
   
 }
 
 /**
- * function depot_get_kategorien
+ * @function depot_get_kategorien
  * @return array
  */
 function depot_get_kategorien($format = false){
 
  if ($format){
     $result = array();
-    $result[''] = '<'.t('Alle').'>';
+    //$result[''] = '<'.t('Alle').'>';
     foreach (bat_event_get_states('depot_kategorie') as $state_id => $state){
       $result[$state_id] = $state['label'];
     }
@@ -826,21 +1380,31 @@ function depot_get_kategorien($format = false){
 
 function depot_form_goto($link){
 
-  if (!user_has_role(ROLE_ADMINISTRATOR)){
+  if (!depot_admin_access_only()){
     drupal_goto($link);
   }
 
 }
 
 function depot_bat_calendar_settings_alter(&$calendar_settings) {
-  // Manual mods
+  // Modifications for display of batCalendar
   $calendar_settings['batCalendar'][0]['viewsTimelineThirtyDayButtonText'] = '~30 days~';
   $calendar_settings['batCalendar'][0]['viewsTimelineThirtyDaySlotDuration'] = '6:00';
 }
 
 /** 
- * Wrapper to set [and manipulate] event states 
- * @param action : "add / edit / remove" [TODO]
+ * Method to bulk set [and manipulate] event states 
+ * 
+ * @param action String "add / edit"
+ * @param type_id int
+ * @param total_units int
+ * @param begin 
+ * @param end
+ * @param event_state "frei / gebucht / geblockt"
+ * @param label String For display in calendar
+ * @param booking_id
+ * 
+ * @todo Set action type of "delete"
  */
 function depot_events_bulk_action($action, $type_id, $total_units, $begin, $end, $event_state = 'gebucht', $label = '', $booking_id = null){
   
@@ -943,6 +1507,7 @@ function depot_units_bulk_action($action, $units_name, $type_id, $total_units){
     } else if ($action == 'edit'){
 
       $units = depot_get_units_count($type_id);
+
       if ($units > $total_units){
         // remove
       } else if ($units < $total_units){
@@ -960,24 +1525,100 @@ function depot_upload_file() {
 
   global $base_url;
 
+  $rp = depot_get_active_regionalpartner();
+
   if ($wrapper = file_stream_wrapper_get_instance_by_uri('public://')) {
 
     $newFileName = preg_replace('/\s+/', '_',basename($_FILES['anhang']['name']));
     $newFileName = htmlentities(stripslashes($newFileName));
- 
+
     $uploaddir = $wrapper->realpath();
     $uploadFile = $uploaddir . '/' . $newFileName;
 
     if (move_uploaded_file($_FILES['anhang']['tmp_name'], $uploadFile)) {
-      return $base_url . '/sites/default/files/' . $newFileName;
+      return $base_url . '/sites/' . $rp['domain'] . '/files/' . $newFileName;
     } else {
       return false;
     }
   }
 }
 
-function humanize_price(&$price){
+/**
+ * @function depot_get_resources_geodata
+ * @return array List of resources, incl. their id, title, adress & geodata
+ */
+function depot_get_resources_geodata() {
+
+  $query = new EntityFieldQuery();
+  $query->entityCondition('entity_type', 'bat_type');
+
+  $result = $query->execute();
+  $output = '';
+
+  if (count($result) > 0) {
+
+    $entities = entity_load('bat_type', array_keys($result['bat_type']));
+    
+    foreach ($entities as $type) {
+      $wrapper = entity_metadata_wrapper('bat_type', $type);
+
+      if ($wrapper->field_adresse_latitude->value() != '' &&
+          $wrapper->field_adresse_longitude->value() != '') {
+          // @todo remove id
+          $output .= '{title:"'. $wrapper->name->value() .'",id:'. $wrapper->type_id->value() .',slug:"'. $wrapper->field_slug->value() .'",lat:'. $wrapper->field_adresse_latitude->value() .',lng:'. $wrapper->field_adresse_longitude->value() .',adress:"'. $wrapper->field_adresse_strasse->value() .'"},';
+      }
+    }
+  }
+
+  return $output;
+
+}
+
+/**
+ * @function depot_get_rp_geodata
+ * @return List of regions, incl. their name and geodata
+ */
+function depot_get_rp_geodata () {
+
+  $output = '';
+
+  if (empty($rp_sites)) {
+    $rp_sites = depot_get_regions();
+  }
+
+  foreach ($rp_sites as $url => $region) {
+    $output .= '{title:"depot '. $region['region']['name'] .'",link:"https://'. $url .'",lat:'. $region['region']['lat'] .',lng:'. $region['region']['lng'] .'},';
+  }
+
+  return $output;
+
+}
+
+
+function depot_get_blog_articles($limit = 5) {
+
+  $query = new EntityFieldQuery();
   
+  $query->entityCondition('entity_type', 'node')
+   ->entityCondition('bundle', 'artikel')
+   ->propertyCondition('status', 1)
+   ->propertyOrderBy('created', 'DESC')
+   ->range(0, $limit);
+
+  $result = $query->execute();
+  $nodes = array();
+
+  if (isset($result['node'])) {
+    $nids = array_keys($result['node']);
+    $nodes = node_load_multiple($nids);
+  }
+  
+  return $nodes;
+
+}
+
+function humanize_price(&$price){
+
   if ($price == '0'){
     $price = null;
     return;
@@ -987,7 +1628,7 @@ function humanize_price(&$price){
   $price = str_replace(',','.',$price);
 
   $formatter = new NumberFormatter('de_DE', NumberFormatter::CURRENCY);
-  $price = $formatter->formatCurrency($price, 'EUR');
+  $price = $formatter->formatCurrency((float)$price, 'EUR');
 
 }
 
