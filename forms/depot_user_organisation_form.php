@@ -37,7 +37,7 @@ function depot_user_organisation_form($form, &$form_state) {
       'Stiftung' => t('Stiftung'),
       'Verein' => t('Verein'),
       'Unternehmen' => t('Unternehmen'),
-      'Sontige Organisation' => t('Sonstiges'),
+      'Sonstige Organisation' => t('Sonstiges'),
     ),
     '#disabled' => $is_organisation,
     '#default_value' => $user->field_organisation_typ['und'][0]['value']

@@ -65,6 +65,7 @@ function depot_ressource_edit_form($form, &$form_state, $type) {
   $selectListKategorien = array();
 
   $typeKategorien = (isset($type->field_kategorie['und'][0]['state_id']) ? $type->field_kategorie['und'] : '');
+  // @todo critical : []
   
   foreach (bat_event_get_states('depot_kategorie') as $kategorie) {
     // Format as required by form API
@@ -159,6 +160,12 @@ function depot_ressource_edit_form($form, &$form_state, $type) {
     $form['field_adresse_latitude']['#access'] = FALSE;
     $form['field_aktiviert']['#access'] = FALSE;
     $form['field_slug']['#access'] = FALSE;
+  } else {
+    // Force visibility
+    $form['field_adresse_longitude']['#access'] = TRUE;
+    $form['field_adresse_latitude']['#access'] = TRUE;
+    $form['field_aktiviert']['#access'] = TRUE;
+    $form['field_slug']['#access'] = TRUE;
   }
 
  # if ($formfield_verleihvertrag_)
@@ -301,6 +308,11 @@ function depot_ressource_edit_form_submit(&$form, &$form_state) {
     //$bezirke = bat_event_get_states('depot_bezirk');
 
     $slug = slugify($wrapper->name->value()) . '-' . $wrapper->field_adresse_postleitzahl->value();
+
+    while (depot_resource_slug_exists($slug)) {
+      // Ooops - same slug already exists -> modify this one
+      $slug .= '-1';
+    }
    
     /*if (isset($bezirke[$wrapper->field_bezirk->value()['state_id']])) {
       $slug .= '-' . slugify($bezirke[$wrapper->field_bezirk->value()['state_id']]['label']);
@@ -333,7 +345,7 @@ function depot_ressource_edit_form_submit(&$form, &$form_state) {
       $mail_body = "Liebe depot-NutzerIn,\r\n\r\n";
       $mail_body .= "Deine Ressource *".$type->name."* wurde durch das depot-Team freigeschaltet und steht nun im Web zur Buchung bereit.\r\n\r\n";
       $mail_body .= "Vielen Dank, dass Du die Ressource online zur Mitnutzung bereitgestellt hast. Wir hoffen, viele nette Leute werden sie mit Dir teilen.\r\n\r\n";
-      $mail_body .= "Hast Du Fragen oder Anregungen zum depot? Hier hilft Dir die kleine Bedienungsanleitung (https://". $rp['domain'] ."/so-funktionierts) oder die Antworten auf häufig gestellte Fragen (https://". $rp['domain'] ."/faq) weiter. Für Anregungen oder offene Fragen zögere nicht, uns diese über das Kontaktformular unter https://". $rp['domain'] ."/contact mitzuteilen.";
+      $mail_body .= "Hast Du Fragen oder Anregungen zum depot? Hier hilft Dir die kleine Bedienungsanleitung (https://depot.social/so-funktionierts) oder die Antworten auf häufig gestellte Fragen (https://depot.social/faq) weiter. Für Anregungen oder offene Fragen zögere nicht, uns diese über das Kontaktformular unter https://". $rp['domain'] ."/contact mitzuteilen.";
       $mail_body .= "Viele Grüße,\r\nDein Team vom depot " . $rp['region']['name'];
 
       $params = array(

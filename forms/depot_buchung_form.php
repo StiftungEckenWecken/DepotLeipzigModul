@@ -1,14 +1,24 @@
 <?php
 
-function replace_euro($price) {
-  return str_replace(',','.',str_replace('€','',$price));
+function replace_euro ($price) {
+  return str_replace(',','.',str_replace('€','',str_replace(' ','',$price)));
 }
 
 /**
  * Calculate prices for a resource (full / VAT / deposit)
+ * @param $booking optional
  * @return Array
  */
-function depot_calc_price ($ressource, $params, $total_time) {
+function depot_calc_price ($ressource, $params, $total_time, $booking = null) {
+
+    global $user;
+      
+    $_user = $user;
+    
+    if (isset($booking) && !empty($booking->field_ausleiher['und'][0]['value'])) {
+        // Fix: If booking is edited by Verleiher, we still want to get the price for the actual Ausleiher role
+        $_user = user_load($booking->field_ausleiher['und'][0]['value']);
+    }
 
     $preis = array();
     $preis['res_preis'] = (float)replace_euro($ressource['field_kosten']['und'][0]['value']);
@@ -31,7 +41,7 @@ function depot_calc_price ($ressource, $params, $total_time) {
     }
   
     $preis['preis_plain'] = $preis['res_preis'] * $total_time * $params['einheiten'];
-  
+
     if ($preis['res_tax'] > 0) {
       $preis['preis_tax'] = $preis['preis_plain'] * $preis['res_tax'] / 100;
       $preis['preis_total'] = $preis['preis_plain'] + $preis['preis_tax'];
@@ -686,7 +696,7 @@ function depot_booking_edit_form_submit(&$form, &$form_state) {
     // Eventually, units and date changed -> recalc price
     // TODO: Change after anti-over-booking-feature has been implemented
     $ressource = get_object_vars(bat_type_load($params['rid']));
-    $price = depot_calc_price($ressource, $params, $total_time);
+    $price = depot_calc_price($ressource, $params, $total_time, $booking);
     $price = machine_to_human_price($price);
 
     $priceHasChanged = ($price['preis_total'] !== $booking->field_preis['und'][0]['value']);

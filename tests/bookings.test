@@ -1,0 +1,48 @@
+<?php
+
+include_once drupal_get_path('module', 'depot') . '/includes/Formatter.inc';
+
+class depotUnitTestExampleTestCase extends DrupalUnitTestCase {
+
+    public static function getInfo () {
+        return array(
+            'name' => 'Pricings',
+            'description' => 'Price formatter should be type-proof',
+            'group' => 'depot'
+        );
+    }
+
+    public function testPriceFormatting () {
+
+        //
+        $message = '0,00 should return 0,00€';
+        $result = '0,00';
+        humanize_price($result);
+
+        $this->assertEqual($result, "0,00 €", $message);
+
+        //
+        $message = '0.00 should return 0,00€';
+        $result = '0.00';
+        humanize_price($result);
+
+        //$this->pass(var_export($result, TRUE));
+
+        $this->assertEqual($result, '0,00 €', $message);*/
+
+        //
+        $message = '0 should return 0,00€';
+        $result = '0';
+        humanize_price($result);
+
+        $this->assertEqual($result, '0,00 €', $message);
+
+        //
+        $message = 'Price becomes lazily rounded'
+        $result = '2,3454';
+        humanize_price($result);
+
+        $this->assertEqual($result, '2,34 €', $message);
+
+    }
+}

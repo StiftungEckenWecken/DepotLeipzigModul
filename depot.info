@@ -5,4 +5,5 @@ core = 7.x
 dependencies[] = bat
 dependencies[] = bat_booking
 dependencies[] = bat_fullcalendar
-files[] = includes.test
+files[] = tests/bookings.test
+files[] = tests/regionalpartner.test

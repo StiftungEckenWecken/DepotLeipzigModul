@@ -1,0 +1,77 @@
+<?php
+
+include_once drupal_get_path('module', 'depot') . '/depot.module';
+
+class depotUnitTestRegionalpartnerTestCase extends DrupalUnitTestCase {
+
+    public static function getInfo () {
+        return array(
+            'name' => 'Regionalpartner',
+            'description' => 'Regionalpartner features (list of regions, active region, Dashboard)',
+            'group' => 'depot'
+        );
+    }
+
+    public function testGetAllRegions () {
+
+        $message = 'Get regions via depot_get_regions';
+        $regions = depot_get_regions();
+
+        // From: include_once DRUPAL_ROOT . '/sites/depot_sites.php';
+        $sites['master.depot.localhost:8000'] = array(
+            'domain' => 'master.depot.localhost:8000',
+            'active' => FALSE,
+            'matomo_site_id' => 1,
+            'region' => array(
+                'name' => 'Leipzig',
+                'state' => 'Sachsen',
+                'lat' => 51.340321,
+                'lng' => 12.387772
+            ),
+            'meta' => array(
+                'logo' => '' // base_path() . path_to_theme() . '/images/logo.png'
+            )
+        );
+
+        $sites['leipzig.depot.localhost:8000'] = array(
+            'domain' => 'leipzig.depot.localhost:8000',//'drupal-demo.localhost',
+            'active' => TRUE,
+            'matomo_site_id' => 1,
+            'region' => array(
+                'name' => 'Demo',
+                'state' => 'Sachsen',
+                'lat' => 53.340321,
+                'lng' => 10.387772
+            ),
+            'meta' => array(
+                'logo' => '' // base_path() . path_to_theme() . '/images/logo.png'
+            )
+        );
+
+        $this->assertEqual($regions, $sites, $message);
+    }
+
+    public function testGetActiveRegionalpartner () {
+
+        $message = 'Get active regionalpartner';
+        $rp = depot_get_active_regionalpartner();
+
+        $sites['master.depot.localhost:8000'] = array(
+            'domain' => 'master.depot.localhost:8000',
+            'active' => FALSE,
+            'matomo_site_id' => 1,
+            'region' => array(
+                'name' => 'Leipzig',
+                'state' => 'Sachsen',
+                'lat' => 51.340321,
+                'lng' => 12.387772
+            ),
+            'meta' => array(
+                'logo' => '' // base_path() . path_to_theme() . '/images/logo.png'
+            )
+        );
+
+        $this->assertEqual($rp, $sites['master.depot.localhost:8000'], $message);
+
+    }
+}
